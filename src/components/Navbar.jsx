@@ -320,15 +320,14 @@ export default function Navbar() {
                 <span className="absolute inset-x-0 bottom-0 h-[3.5px] scale-x-0 bg-[#fd5001] transition-transform duration-200 group-hover:scale-x-100" />
               </a>
 
-              {/* Careers Link (Exact Wipro Style: 16px Bold) */}
-              <button
-                type="button"
-                onClick={() => setCareerModal(true)}
+              {/* Careers Link (Direct Link to Dedicated Page) */}
+              <a
+                href="/careers"
                 className="group relative flex h-full items-center px-1 text-[16px] font-bold tracking-[-0.015em] text-[#111827] transition-colors hover:text-[#fd5001]"
               >
                 <span>Careers</span>
                 <span className="absolute inset-x-0 bottom-0 h-[3.5px] scale-x-0 bg-[#fd5001] transition-transform duration-200 group-hover:scale-x-100" />
-              </button>
+              </a>
             </nav>
           </div>
 
@@ -437,17 +436,14 @@ export default function Navbar() {
 
             {/* Careers on Mobile */}
             <div className="py-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileOpen(false)
-                  setCareerModal(true)
-                }}
-                className="flex w-full items-center justify-between py-2.5 text-left text-[17px] font-bold text-neutral-950"
+              <a
+                href="/careers"
+                onClick={() => setMobileOpen(false)}
+                className="flex w-full items-center justify-between py-2.5 text-left text-[17px] font-bold text-neutral-950 transition-colors hover:text-[#fd5001]"
               >
-                <span>Careers</span>
+                <span>Careers & Internships</span>
                 <Briefcase size={18} className="text-neutral-400" />
-              </button>
+              </a>
             </div>
 
             {/* Direct Contact link on Mobile */}
@@ -640,19 +636,19 @@ export default function Navbar() {
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <a
-                href="mailto:careers@naizon.in?subject=Application%20for%20Engineering%20Role%20at%20NAIZON"
+                href="mailto:info@naizon.in?subject=Application%20for%20Engineering%20Role%20/%20Internship%20at%20NAIZON"
                 className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-[#fd5001] px-5 text-sm font-bold text-white transition hover:bg-[#e04600]"
               >
-                <span>Send CV to careers@naizon.in</span>
+                <span>Send CV to info@naizon.in</span>
                 <ExternalLink size={15} strokeWidth={2.2} />
               </a>
-              <button
-                type="button"
+              <a
+                href="/careers"
                 onClick={() => setCareerModal(false)}
                 className="inline-flex min-h-11 items-center justify-center rounded-lg border border-neutral-300 px-5 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
               >
-                Close
-              </button>
+                Explore Careers &rarr;
+              </a>
             </div>
           </div>
         </div>
