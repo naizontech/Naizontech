@@ -460,27 +460,28 @@ export default function Navbar() {
           <div className="hidden items-center gap-3.5 lg:flex">
             {currentUser ? (
               <div ref={userMenuRef} className="relative">
+                {/* Compact Profile Picture Only Button */}
                 <button
                   type="button"
                   onClick={() => setUserMenuOpen((prev) => !prev)}
-                  className="inline-flex h-11 items-center gap-2.5 rounded-lg border border-neutral-300 bg-white px-3.5 text-[14px] font-bold text-neutral-800 transition-colors hover:border-[#fd5001] hover:bg-neutral-50 shadow-sm"
+                  aria-label="User account menu"
+                  title={currentUser.displayName || currentUser.email}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#fd5001] focus:ring-offset-2 active:scale-95"
                 >
-                  <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black uppercase text-white shadow-sm shrink-0 ${
-                    isSuperAdmin(currentUser)
-                      ? 'bg-gradient-to-tr from-amber-500 to-[#fd5001] ring-2 ring-amber-400/40'
-                      : 'bg-[#fd5001]'
-                  }`}>
-                    {currentUser.displayName ? currentUser.displayName[0] : (currentUser.email ? currentUser.email[0] : 'U')}
+                  <div
+                    className={`grid h-10 w-10 place-items-center rounded-full text-sm font-black uppercase text-white shadow-sm transition-shadow hover:shadow-md ${
+                      isSuperAdmin(currentUser)
+                        ? 'bg-gradient-to-tr from-amber-500 via-[#fd5001] to-amber-600 ring-2 ring-amber-400/50'
+                        : 'bg-[#fd5001] ring-2 ring-neutral-200'
+                    }`}
+                  >
+                    {(currentUser.displayName || currentUser.email || 'M')[0].toUpperCase()}
                   </div>
-                  <span className="whitespace-nowrap text-[13.5px]">
-                    {currentUser.displayName || currentUser.email.split('@')[0]}
-                  </span>
                   {isSuperAdmin(currentUser) && (
-                    <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-700 ring-1 ring-amber-500/30">
-                      ADMIN
+                    <span className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-amber-500 text-[9px] text-slate-950 font-black ring-2 ring-white shadow-sm">
+                      <Crown size={9} strokeWidth={3} />
                     </span>
                   )}
-                  <ChevronDown size={14} className="text-neutral-500 shrink-0" />
                 </button>
 
                 {userMenuOpen && (
@@ -576,17 +577,43 @@ export default function Navbar() {
             </a>
           </div>
 
-          {/* Mobile Hamburger Button */}
-          <button
-            type="button"
-            onClick={() => setMobileOpen((prev) => !prev)}
-            aria-expanded={mobileOpen}
-            aria-controls="mobile-navigation"
-            aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
-            className="grid h-10 w-10 place-items-center rounded-lg border border-neutral-300 text-neutral-900 transition-colors hover:bg-neutral-50 lg:hidden"
-          >
-            {mobileOpen ? <X size={21} /> : <Menu size={21} />}
-          </button>
+          {/* Mobile Right Controls */}
+          <div className="flex items-center gap-2.5 lg:hidden">
+            {currentUser && (
+              <a
+                href="/login"
+                aria-label="Account Dashboard"
+                className="relative grid h-9 w-9 place-items-center rounded-full transition-transform active:scale-95"
+              >
+                <div
+                  className={`grid h-9 w-9 place-items-center rounded-full text-xs font-black uppercase text-white shadow-sm ${
+                    isSuperAdmin(currentUser)
+                      ? 'bg-gradient-to-tr from-amber-500 via-[#fd5001] to-amber-600 ring-2 ring-amber-400/50'
+                      : 'bg-[#fd5001] ring-2 ring-neutral-200'
+                  }`}
+                >
+                  {(currentUser.displayName || currentUser.email || 'M')[0].toUpperCase()}
+                </div>
+                {isSuperAdmin(currentUser) && (
+                  <span className="absolute -bottom-0.5 -right-0.5 grid h-3.5 w-3.5 place-items-center rounded-full bg-amber-500 text-[8px] text-slate-950 font-black ring-1 ring-white">
+                    <Crown size={8} strokeWidth={3} />
+                  </span>
+                )}
+              </a>
+            )}
+
+            {/* Mobile Hamburger Button */}
+            <button
+              type="button"
+              onClick={() => setMobileOpen((prev) => !prev)}
+              aria-expanded={mobileOpen}
+              aria-controls="mobile-navigation"
+              aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
+              className="grid h-10 w-10 place-items-center rounded-lg border border-neutral-300 text-neutral-900 transition-colors hover:bg-neutral-50"
+            >
+              {mobileOpen ? <X size={21} /> : <Menu size={21} />}
+            </button>
+          </div>
         </div>
       </header>
 
