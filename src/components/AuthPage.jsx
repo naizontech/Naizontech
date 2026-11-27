@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   auth,
@@ -16,6 +16,14 @@ import {
   onAuthStateChanged,
   isSuperAdmin,
   ADMIN_EMAIL,
+  canAccessLeads,
+  getUserRole,
+  getTeamMembers,
+  saveTeamMember,
+  removeTeamMember,
+  getStoredAuthUser,
+  saveStoredAuthUser,
+  updateUserAvatar,
 } from '../utils/firebase'
 import {
   LogIn,
@@ -47,6 +55,12 @@ import {
   Copy,
   Search,
   Filter,
+  Users,
+  UserCheck,
+  Trash2,
+  Camera,
+  Upload,
+  Shield,
 } from 'lucide-react'
 import { supabase } from '../utils/supabase/client'
 
@@ -97,6 +111,21 @@ export default function AuthPage({ initialTab = 'login' }) {
   const [enquiryFilter, setEnquiryFilter] = useState('All')
   const [enquirySearch, setEnquirySearch] = useState('')
 
+  // Admin Dashboard View Tabs: 'leads' | 'team'
+  const [dashboardTab, setDashboardTab] = useState('leads')
+
+  // Team & Role Management State
+  const [teamMembers, setTeamMembers] = useState([])
+  const [newMemberEmail, setNewMemberEmail] = useState('')
+  const [newMemberName, setNewMemberName] = useState('')
+  const [newMemberRole, setNewMemberRole] = useState('lead_manager') // 'lead_manager' | 'super_admin' | 'viewer'
+  const [teamSuccess, setTeamSuccess] = useState('')
+  const [teamError, setTeamError] = useState('')
+
+  // Avatar upload
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const avatarFileRef = useRef(null)
+
   const loadEnquiries = async () => {
     setLoadingEnquiries(true)
     try {
@@ -126,21 +155,123 @@ export default function AuthPage({ initialTab = 'login' }) {
     }
   }
 
+  // Handle Team Member Addition
+  const handleAddTeamMember = (e) => {
+    e.preventDefault()
+    setTeamError('')
+    setTeamSuccess('')
+    if (!newMemberEmail.trim()) {
+      setTeamError('Please enter an email address.')
+      return
+    }
+    try {
+      const updated = saveTeamMember({
+        email: newMemberEmail.trim(),
+        name: newMemberName.trim() || newMemberEmail.split('@')[0],
+        role: newMemberRole,
+      })
+      setTeamMembers(updated)
+      const assignedRoleLabel = newMemberRole === 'super_admin' ? 'Super Admin' : (newMemberRole === 'viewer' ? 'Viewer' : 'Lead Manager')
+      setTeamSuccess(`Role granted! ${newMemberEmail} is now assigned as ${assignedRoleLabel} and can view Contact Form leads.`)
+      setNewMemberEmail('')
+      setNewMemberName('')
+      setTimeout(() => setTeamSuccess(''), 6000)
+    } catch (err) {
+      setTeamError(err.message || 'Failed to assign role.')
+    }
+  }
+
+  // Handle Team Member Removal
+  const handleRemoveTeamMember = (email) => {
+    if (!window.confirm(`Revoke contact form access for ${email}?`)) return
+    try {
+      const updated = removeTeamMember(email)
+      setTeamMembers(updated)
+      setTeamSuccess(`Access revoked for ${email}.`)
+      setTimeout(() => setTeamSuccess(''), 4000)
+    } catch (err) {
+      setTeamError(err.message || 'Failed to remove member.')
+    }
+  }
+
+  // Handle Avatar Image File Upload
+  const handleAvatarFileSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file (PNG, JPG, or WEBP).')
+      return
+    }
+    setAvatarUploading(true)
+    try {
+      const reader = new FileReader()
+      reader.onload = async (event) => {
+        const base64 = event.target.result
+        await updateUserAvatar(base64)
+        setAvatarUploading(false)
+        setAvatarFailed(false)
+        setAuthSuccess('Profile picture updated successfully across all pages!')
+        setTimeout(() => setAuthSuccess(''), 4000)
+      }
+      reader.readAsDataURL(file)
+    } catch (err) {
+      setAvatarUploading(false)
+      setAuthError('Could not process avatar image.')
+    }
+  }
+
   useEffect(() => {
     if (modeParam === 'signup') setTab('signup')
     else if (modeParam === 'login') setTab('login')
     else if (modeParam === 'forgot') setTab('forgot')
   }, [modeParam])
 
+  // Initial local cache hydrate + Firebase Auth listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user)
+    // 1. Instant local storage hydrate
+    const stored = getStoredAuthUser()
+    if (stored) {
+      setCurrentUser(stored)
       setLoadingUser(false)
-      if (user && isSuperAdmin(user)) {
+      if (canAccessLeads(stored)) {
         loadEnquiries()
       }
+    }
+    setTeamMembers(getTeamMembers())
+
+    // 2. Firebase Auth authoritative sync
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        saveStoredAuthUser(user)
+        setCurrentUser(user)
+        setLoadingUser(false)
+        if (canAccessLeads(user)) {
+          loadEnquiries()
+        }
+      } else {
+        saveStoredAuthUser(null)
+        setCurrentUser(null)
+        setLoadingUser(false)
+      }
     })
-    return () => unsubscribe()
+
+    const handleAuthEvent = () => {
+      const u = getStoredAuthUser() || auth.currentUser
+      setCurrentUser(u)
+    }
+
+    const handleTeamEvent = () => {
+      setTeamMembers(getTeamMembers())
+    }
+
+    window.addEventListener('naizon_auth_change', handleAuthEvent)
+    window.addEventListener('naizon_team_change', handleTeamEvent)
+
+    return () => {
+      unsubscribe()
+      window.removeEventListener('naizon_auth_change', handleAuthEvent)
+      window.removeEventListener('naizon_team_change', handleTeamEvent)
+    }
   }, [])
 
   // Cooldown countdown timer
@@ -340,6 +471,8 @@ export default function AuthPage({ initialTab = 'login' }) {
   }
 
   const isAdmin = isSuperAdmin(currentUser)
+  const hasLeadAccess = canAccessLeads(currentUser)
+  const userRoleTitle = getUserRole(currentUser)
 
   const filteredEnquiries = enquiries.filter((item) => {
     const matchesFilter =
@@ -364,7 +497,7 @@ export default function AuthPage({ initialTab = 'login' }) {
 
       {/* Top Bar with Navigation & Security Badge */}
       <header className={`mx-auto w-full flex items-center justify-between pb-6 border-b border-slate-800/80 transition-all duration-200 ${
-        currentUser && isAdmin ? 'max-w-6xl' : 'max-w-xl'
+        currentUser && hasLeadAccess ? 'max-w-6xl' : 'max-w-xl'
       }`}>
         <a
           href="/"
@@ -375,10 +508,10 @@ export default function AuthPage({ initialTab = 'login' }) {
         </a>
 
         <div className="flex items-center gap-2.5">
-          {currentUser && isAdmin && (
+          {currentUser && hasLeadAccess && (
             <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 px-3 py-1 text-xs font-bold text-amber-400">
               <Crown size={13} className="text-amber-400" />
-              <span>Super Admin Console</span>
+              <span>{isAdmin ? 'Super Admin Console' : 'Lead Manager Portal'}</span>
             </span>
           )}
           <div className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
@@ -390,7 +523,7 @@ export default function AuthPage({ initialTab = 'login' }) {
 
       {/* Main Content Area */}
       <main className={`mx-auto w-full py-6 transition-all duration-200 ${
-        currentUser && isAdmin ? 'max-w-6xl' : 'max-w-xl'
+        currentUser && hasLeadAccess ? 'max-w-6xl' : 'max-w-xl'
       }`}>
         
         {/* Verification Pending Screen (Shown right after signup) */}
@@ -461,9 +594,9 @@ export default function AuthPage({ initialTab = 'login' }) {
             </div>
           </div>
         ) : currentUser ? (
-          isAdmin ? (
+          hasLeadAccess ? (
             /* ================================================================ */
-            /* EXECUTIVE ADMIN DASHBOARD (SUPER ADMIN CONSOLE)                  */
+            /* EXECUTIVE ADMIN & LEAD MANAGER DASHBOARD                         */
             /* ================================================================ */
             <div className="space-y-6 animate-in fade-in duration-200">
               {/* Header Banner */}
@@ -472,14 +605,52 @@ export default function AuthPage({ initialTab = 'login' }) {
 
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-5">
                   <div className="flex items-center gap-4">
-                    {/* Admin Avatar */}
-                    <div className="relative shrink-0">
-                      <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-tr from-amber-500 to-[#fd5001] text-2xl font-black text-white shadow-lg ring-2 ring-amber-400/40">
-                        {(currentUser.displayName || currentUser.email || 'M')[0].toUpperCase()}
-                      </div>
-                      <span className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full bg-amber-500 text-slate-950 ring-2 ring-[#161c2d]">
-                        <Crown size={12} strokeWidth={3} />
-                      </span>
+                    {/* Admin Avatar with Change Photo Trigger */}
+                    <div className="relative shrink-0 group">
+                      {currentUser.photoURL && !avatarFailed ? (
+                        <img
+                          src={currentUser.photoURL}
+                          alt={currentUser.displayName || 'Profile'}
+                          onError={() => setAvatarFailed(true)}
+                          className="h-16 w-16 rounded-2xl border-2 border-slate-700 object-cover shadow-lg ring-2 ring-amber-400/40"
+                        />
+                      ) : (
+                        <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-tr from-amber-500 to-[#fd5001] text-2xl font-black text-white shadow-lg ring-2 ring-amber-400/40">
+                          {(currentUser.displayName || currentUser.email || 'M')[0].toUpperCase()}
+                        </div>
+                      )}
+
+                      {/* Photo Upload Overlay Button */}
+                      <button
+                        type="button"
+                        onClick={() => avatarFileRef.current?.click()}
+                        disabled={avatarUploading}
+                        title="Click to change profile picture"
+                        className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-bold backdrop-blur-xs"
+                      >
+                        {avatarUploading ? (
+                          <Loader2 size={16} className="animate-spin text-amber-400" />
+                        ) : (
+                          <>
+                            <Camera size={16} className="text-amber-300 mb-0.5" />
+                            <span>Change</span>
+                          </>
+                        )}
+                      </button>
+
+                      <input
+                        ref={avatarFileRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarFileSelect}
+                        className="hidden"
+                      />
+
+                      {isAdmin && (
+                        <span className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full bg-amber-500 text-slate-950 ring-2 ring-[#161c2d] pointer-events-none">
+                          <Crown size={12} strokeWidth={3} />
+                        </span>
+                      )}
                     </div>
 
                     <div>
@@ -489,7 +660,7 @@ export default function AuthPage({ initialTab = 'login' }) {
                         </h1>
                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
                           <Crown size={12} className="text-amber-400" />
-                          Super Admin
+                          {userRoleTitle}
                         </span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-mono text-slate-400">
@@ -497,7 +668,7 @@ export default function AuthPage({ initialTab = 'login' }) {
                         <span className="text-slate-600">·</span>
                         <span className="text-emerald-400 flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          Full Root Control
+                          {isAdmin ? 'Full Root Control' : 'Contact Lead Access Granted'}
                         </span>
                       </div>
                     </div>
@@ -505,6 +676,16 @@ export default function AuthPage({ initialTab = 'login' }) {
 
                   {/* Header Actions */}
                   <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => avatarFileRef.current?.click()}
+                      className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 text-xs font-bold text-slate-200 transition hover:bg-slate-700 active:scale-95"
+                      title="Upload custom profile photo"
+                    >
+                      <Upload size={14} className="text-amber-400" />
+                      <span>Upload Photo</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={loadEnquiries}
@@ -515,17 +696,6 @@ export default function AuthPage({ initialTab = 'login' }) {
                       <RefreshCw size={14} className={loadingEnquiries ? 'animate-spin text-amber-400' : ''} />
                       <span>{loadingEnquiries ? 'Loading...' : 'Refresh'}</span>
                     </button>
-
-                    <a
-                      href="/data"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20 active:scale-95"
-                    >
-                      <FileText size={14} />
-                      <span>Raw Table (/data)</span>
-                      <ExternalLink size={12} />
-                    </a>
 
                     <a
                       href="/"
@@ -546,6 +716,14 @@ export default function AuthPage({ initialTab = 'login' }) {
                   </div>
                 </div>
               </div>
+
+              {/* Status & Feedback Notifications */}
+              {authSuccess && (
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 animate-in fade-in">
+                  <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+                  <span>{authSuccess}</span>
+                </div>
+              )}
 
               {/* 3 Metric Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -580,182 +758,378 @@ export default function AuthPage({ initialTab = 'login' }) {
 
                 <div className="rounded-xl border border-slate-800 bg-[#161c2d] p-5 shadow-lg">
                   <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Infrastructure</span>
-                    <ShieldCheck size={18} className="text-emerald-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Active Team & Roles</span>
+                    <Users size={18} className="text-emerald-400" />
                   </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
-                    <span className="text-base font-bold text-emerald-300">Operational & Secure</span>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="text-3xl font-black text-white">{teamMembers.length}</span>
+                    <span className="text-xs text-emerald-400 font-semibold">Authorized members</span>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500">Supabase DB · Firebase Auth · SSL Active</p>
+                  <p className="mt-1 text-[11px] text-slate-500">Users with permission to view Contact Form</p>
                 </div>
               </div>
 
-              {/* Inquiries & Leads Feed */}
-              <div className="rounded-2xl border border-slate-800 bg-[#161c2d] p-6 sm:p-7 shadow-2xl">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800">
-                  <div>
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                      <span>Customer Enquiries & Project Leads</span>
-                      <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-bold text-amber-400">
-                        {filteredEnquiries.length}
-                      </span>
-                    </h2>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      Real-time customer enquiries submitted through the NAIZON contact portal.
-                    </p>
-                  </div>
-
-                  {/* Search Input */}
-                  <div className="relative min-w-[240px] sm:w-72">
-                    <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input
-                      type="text"
-                      value={enquirySearch}
-                      onChange={(e) => setEnquirySearch(e.target.value)}
-                      placeholder="Search name, phone, service..."
-                      className="w-full rounded-xl border border-slate-700 bg-slate-900/90 pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
-                    />
-                    {enquirySearch && (
-                      <button
-                        type="button"
-                        onClick={() => setEnquirySearch('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Service Filter Tabs */}
-                <div className="flex flex-wrap items-center gap-2 pt-4 pb-2">
-                  <span className="text-xs font-bold text-slate-400 flex items-center gap-1 mr-1">
-                    <Filter size={12} />
-                    Filter:
+              {/* Navigation View Switcher (Leads vs User Management) */}
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+                <button
+                  type="button"
+                  onClick={() => setDashboardTab('leads')}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+                    dashboardTab === 'leads'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                      : 'border border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <FileText size={15} />
+                  <span>Contact Form Leads</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                    dashboardTab === 'leads' ? 'bg-black/20 text-slate-950' : 'bg-slate-800 text-amber-400'
+                  }`}>
+                    {enquiries.length}
                   </span>
-                  {['All', 'Web', 'Mobile', 'Ecommerce', 'Website'].map((filterName) => (
-                    <button
-                      key={filterName}
-                      type="button"
-                      onClick={() => setEnquiryFilter(filterName)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                        enquiryFilter === filterName
-                          ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                          : 'border border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                      }`}
-                    >
-                      {filterName === 'All' ? 'All Services' : filterName}
-                    </button>
-                  ))}
-                </div>
+                </button>
 
-                {/* Inquiries Cards */}
-                <div className="mt-4 space-y-4">
-                  {loadingEnquiries ? (
-                    <div className="space-y-3 py-4">
-                      <div className="h-28 rounded-xl bg-slate-800/50 animate-pulse" />
-                      <div className="h-28 rounded-xl bg-slate-800/50 animate-pulse" />
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setDashboardTab('team')}
+                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+                      dashboardTab === 'team'
+                        ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                        : 'border border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <Users size={15} />
+                    <span>User Management & Roles</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                      dashboardTab === 'team' ? 'bg-black/20 text-slate-950' : 'bg-slate-800 text-amber-400'
+                    }`}>
+                      {teamMembers.length}
+                    </span>
+                  </button>
+                )}
+              </div>
+
+              {/* VIEW 1: USER MANAGEMENT & ROLE PERMISSION SYSTEM */}
+              {dashboardTab === 'team' && isAdmin ? (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  {/* Team Notification Alerts */}
+                  {teamSuccess && (
+                    <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-300">
+                      <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+                      <span>{teamSuccess}</span>
                     </div>
-                  ) : filteredEnquiries.length > 0 ? (
-                    filteredEnquiries.map((enquiry) => (
-                      <div
-                        key={enquiry.id || enquiry.created_at}
-                        className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 transition hover:border-slate-700 hover:bg-slate-900/90"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2.5">
-                              <h3 className="text-base font-bold text-white">
-                                {enquiry.name || 'Anonymous Prospect'}
-                              </h3>
-                              {enquiry.service && (
-                                <span className="rounded-md bg-[#fd5001]/15 border border-[#fd5001]/30 px-2 py-0.5 text-[11px] font-bold text-[#fd7030]">
-                                  {enquiry.service}
-                                </span>
-                              )}
-                              {enquiry.budget && (
-                                <span className="rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-bold text-emerald-400">
-                                  {enquiry.budget}
-                                </span>
-                              )}
+                  )}
+
+                  {teamError && (
+                    <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-300">
+                      <AlertCircle size={16} className="shrink-0 text-red-400" />
+                      <span>{teamError}</span>
+                    </div>
+                  )}
+
+                  {/* Form: Add New Member & Assign Role */}
+                  <div className="rounded-2xl border border-slate-800 bg-[#161c2d] p-6 sm:p-7 shadow-2xl">
+                    <div className="flex items-center gap-2.5 pb-4 border-b border-slate-800">
+                      <div className="grid h-8 w-8 place-items-center rounded-lg bg-amber-500/15 text-amber-400">
+                        <UserCheck size={18} />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-bold text-white">
+                          Grant User Access & Assign Role
+                        </h2>
+                        <p className="text-xs text-slate-400">
+                          Authorized members can sign in at <strong className="text-white">/login</strong> with their email and view submitted Contact forms.
+                        </p>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleAddTeamMember} className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                          Member Email Address *
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={newMemberEmail}
+                          onChange={(e) => setNewMemberEmail(e.target.value)}
+                          placeholder="e.g. member@naizon.com"
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                          Member Name (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={newMemberName}
+                          onChange={(e) => setNewMemberName(e.target.value)}
+                          placeholder="e.g. Team Lead / Partner"
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                          Role & Permission *
+                        </label>
+                        <select
+                          value={newMemberRole}
+                          onChange={(e) => setNewMemberRole(e.target.value)}
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-xs text-white outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                        >
+                          <option value="lead_manager">Lead Manager (Can View & Call/Email Leads)</option>
+                          <option value="super_admin">Super Admin (Full Root System Access)</option>
+                          <option value="viewer">Viewer (Read-Only Contact Forms)</option>
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-3 flex justify-end">
+                        <button
+                          type="submit"
+                          className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-amber-400 shadow-md shadow-amber-500/20 active:scale-95"
+                        >
+                          <UserPlus size={15} />
+                          <span>Assign Role & Grant Access</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Team Members List */}
+                  <div className="rounded-2xl border border-slate-800 bg-[#161c2d] p-6 sm:p-7 shadow-2xl">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">
+                      Active Authorized Members ({teamMembers.length})
+                    </h3>
+
+                    <div className="space-y-3">
+                      {teamMembers.map((member) => (
+                        <div
+                          key={member.email}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4 transition hover:border-slate-700"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-800 text-sm font-black uppercase text-amber-400 ring-1 ring-slate-700">
+                              {(member.name || member.email || 'T')[0].toUpperCase()}
                             </div>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Received on {formatDateTime(enquiry.created_at)}
-                            </p>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-white">
+                                  {member.name || member.email.split('@')[0]}
+                                </span>
+                                {member.isOwner && (
+                                  <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-black uppercase text-amber-400 ring-1 ring-amber-500/30">
+                                    Owner
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs font-mono text-slate-400">
+                                {member.email}
+                              </span>
+                            </div>
                           </div>
 
-                          {/* Quick Actions */}
-                          <div className="flex flex-wrap items-center gap-2">
-                            {enquiry.email && (
-                              <a
-                                href={`mailto:${enquiry.email}?subject=Regarding your enquiry with NAIZON`}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-bold text-slate-200 transition hover:bg-slate-700 hover:text-white"
-                              >
-                                <Mail size={13} className="text-[#fd5001]" />
-                                <span>Email</span>
-                              </a>
-                            )}
-                            {enquiry.phone && (
-                              <a
-                                href={`tel:${enquiry.phone}`}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-bold text-slate-200 transition hover:bg-slate-700 hover:text-white"
-                              >
-                                <Smartphone size={13} className="text-emerald-400" />
-                                <span>Call</span>
-                              </a>
-                            )}
-                            {enquiry.phone && (
+                          <div className="flex items-center gap-3">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
+                              member.role === 'super_admin'
+                                ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
+                                : 'bg-blue-500/15 border border-blue-500/30 text-blue-300'
+                            }`}>
+                              <Shield size={12} />
+                              <span>{member.roleLabel || member.role}</span>
+                            </span>
+
+                            <span className="text-[11px] text-emerald-400 font-semibold hidden md:inline">
+                              ✓ Contact Form Access
+                            </span>
+
+                            {!member.isOwner && (
                               <button
                                 type="button"
-                                onClick={() => copyToClipboard(enquiry.phone, `phone_${enquiry.id}`)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
-                                title="Copy Phone Number"
+                                onClick={() => handleRemoveTeamMember(member.email)}
+                                title="Revoke access"
+                                className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-300 hover:bg-red-500/20 transition"
                               >
-                                {copiedField === `phone_${enquiry.id}` ? (
-                                  <Check size={13} className="text-emerald-400" />
-                                ) : (
-                                  <Copy size={13} />
-                                )}
-                                <span>{copiedField === `phone_${enquiry.id}` ? 'Copied' : enquiry.phone}</span>
+                                <Trash2 size={13} />
+                                <span>Revoke</span>
                               </button>
                             )}
                           </div>
                         </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* VIEW 2: CONTACT FORM ENQUIRIES FEED */
+                <div className="rounded-2xl border border-slate-800 bg-[#161c2d] p-6 sm:p-7 shadow-2xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800">
+                    <div>
+                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <span>Customer Enquiries & Project Leads</span>
+                        <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-bold text-amber-400">
+                          {filteredEnquiries.length}
+                        </span>
+                      </h2>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        Real-time customer enquiries submitted through the NAIZON contact portal.
+                      </p>
+                    </div>
 
-                        {/* Details text */}
-                        {enquiry.details && (
-                          <div className="mt-3.5 rounded-lg border border-slate-800/80 bg-slate-950/60 p-3.5 text-xs leading-relaxed text-slate-300 whitespace-pre-wrap font-sans">
-                            {enquiry.details}
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 py-12 px-6 text-center">
-                      <FileText size={32} className="mx-auto text-slate-600 mb-3" />
-                      <p className="text-sm font-bold text-slate-300">
-                        {enquirySearch ? 'No enquiries match your search' : 'No enquiries submitted yet'}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
-                        {enquirySearch
-                          ? 'Try searching with a different term or clear the filter.'
-                          : 'When visitors submit the contact form on your website, their leads will show up here live.'}
-                      </p>
-                      <div className="mt-4 flex justify-center gap-3">
+                    {/* Search Input */}
+                    <div className="relative min-w-[240px] sm:w-72">
+                      <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="text"
+                        value={enquirySearch}
+                        onChange={(e) => setEnquirySearch(e.target.value)}
+                        placeholder="Search name, phone, service..."
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900/90 pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                      />
+                      {enquirySearch && (
                         <button
                           type="button"
-                          onClick={loadEnquiries}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 px-3.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition"
+                          onClick={() => setEnquirySearch('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
                         >
-                          <RefreshCw size={13} />
-                          <span>Check Again</span>
+                          <X size={14} />
                         </button>
-                      </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+
+                  {/* Service Filter Tabs */}
+                  <div className="flex flex-wrap items-center gap-2 pt-4 pb-2">
+                    <span className="text-xs font-bold text-slate-400 flex items-center gap-1 mr-1">
+                      <Filter size={12} />
+                      Filter:
+                    </span>
+                    {['All', 'Web', 'Mobile', 'Ecommerce', 'Website'].map((filterName) => (
+                      <button
+                        key={filterName}
+                        type="button"
+                        onClick={() => setEnquiryFilter(filterName)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                          enquiryFilter === filterName
+                            ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                            : 'border border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        {filterName === 'All' ? 'All Services' : filterName}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Inquiries Cards */}
+                  <div className="mt-4 space-y-4">
+                    {loadingEnquiries ? (
+                      <div className="space-y-3 py-4">
+                        <div className="h-28 rounded-xl bg-slate-800/50 animate-pulse" />
+                        <div className="h-28 rounded-xl bg-slate-800/50 animate-pulse" />
+                      </div>
+                    ) : filteredEnquiries.length > 0 ? (
+                      filteredEnquiries.map((enquiry) => (
+                        <div
+                          key={enquiry.id || enquiry.created_at}
+                          className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 transition hover:border-slate-700 hover:bg-slate-900/90"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2.5">
+                                <h3 className="text-base font-bold text-white">
+                                  {enquiry.name || 'Anonymous Prospect'}
+                                </h3>
+                                {enquiry.service && (
+                                  <span className="rounded-md bg-[#fd5001]/15 border border-[#fd5001]/30 px-2 py-0.5 text-[11px] font-bold text-[#fd7030]">
+                                    {enquiry.service}
+                                  </span>
+                                )}
+                                {enquiry.budget && (
+                                  <span className="rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-bold text-emerald-400">
+                                    {enquiry.budget}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-1 text-xs text-slate-500">
+                                Received on {formatDateTime(enquiry.created_at)}
+                              </p>
+                            </div>
+
+                            {/* Quick Actions */}
+                            <div className="flex flex-wrap items-center gap-2">
+                              {enquiry.email && (
+                                <a
+                                  href={`mailto:${enquiry.email}?subject=Regarding your enquiry with NAIZON`}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-bold text-slate-200 transition hover:bg-slate-700 hover:text-white"
+                                >
+                                  <Mail size={13} className="text-[#fd5001]" />
+                                  <span>Email</span>
+                                </a>
+                              )}
+                              {enquiry.phone && (
+                                <a
+                                  href={`tel:${enquiry.phone}`}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-bold text-slate-200 transition hover:bg-slate-700 hover:text-white"
+                                >
+                                  <Smartphone size={13} className="text-emerald-400" />
+                                  <span>Call</span>
+                                </a>
+                              )}
+                              {enquiry.phone && (
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(enquiry.phone, `phone_${enquiry.id}`)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
+                                  title="Copy Phone Number"
+                                >
+                                  {copiedField === `phone_${enquiry.id}` ? (
+                                    <Check size={13} className="text-emerald-400" />
+                                  ) : (
+                                    <Copy size={13} />
+                                  )}
+                                  <span>{copiedField === `phone_${enquiry.id}` ? 'Copied' : enquiry.phone}</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Details text */}
+                          {enquiry.details && (
+                            <div className="mt-3.5 rounded-lg border border-slate-800/80 bg-slate-950/60 p-3.5 text-xs leading-relaxed text-slate-300 whitespace-pre-wrap font-sans">
+                              {enquiry.details}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 py-12 px-6 text-center">
+                        <FileText size={32} className="mx-auto text-slate-600 mb-3" />
+                        <p className="text-sm font-bold text-slate-300">
+                          {enquirySearch ? 'No enquiries match your search' : 'No enquiries submitted yet'}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
+                          {enquirySearch
+                            ? 'Try searching with a different term or clear the filter.'
+                            : 'When visitors submit the contact form on your website, their leads will show up here live.'}
+                        </p>
+                        <div className="mt-4 flex justify-center gap-3">
+                          <button
+                            type="button"
+                            onClick={loadEnquiries}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 px-3.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition"
+                          >
+                            <RefreshCw size={13} />
+                            <span>Check Again</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           ) : (
             /* ================================================================ */

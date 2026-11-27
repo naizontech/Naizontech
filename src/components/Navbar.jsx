@@ -36,6 +36,10 @@ import {
   onAuthStateChanged,
   isSuperAdmin,
   ADMIN_EMAIL,
+  getStoredAuthUser,
+  saveStoredAuthUser,
+  canAccessLeads,
+  getUserRole,
 } from '../utils/firebase'
 
 const navigationData = [
@@ -145,8 +149,9 @@ export default function Navbar() {
   const [mobileExpanded, setMobileExpanded] = useState(null)
   const [careerModal, setCareerModal] = useState(false)
 
-  // Firebase Auth State
+  // Firebase Auth State (Instant Sync from Local Cache)
   const [currentUser, setCurrentUser] = useState(null)
+  const [avatarError, setAvatarError] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authTab, setAuthTab] = useState('signup') // 'signup' | 'login' | 'forgot'
@@ -166,12 +171,40 @@ export default function Navbar() {
   const navRef = useRef(null)
   const userMenuRef = useRef(null)
 
-  // Listen to Firebase Auth state
+  // Listen to Firebase Auth state + instant local storage sync
   useEffect(() => {
+    // 1. Immediately hydrate from stored user cache (0ms delay)
+    const stored = getStoredAuthUser()
+    if (stored) {
+      setCurrentUser(stored)
+    }
+
+    // 2. Subscribe to Firebase Auth for authoritative updates
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user)
+      if (user) {
+        saveStoredAuthUser(user)
+        setCurrentUser(user)
+      } else {
+        saveStoredAuthUser(null)
+        setCurrentUser(null)
+      }
     })
-    return () => unsubscribe()
+
+    // 3. Listen to avatar / auth changes across windows & tabs
+    const handleAuthEvent = () => {
+      const u = getStoredAuthUser() || auth.currentUser
+      setCurrentUser(u)
+      setAvatarError(false)
+    }
+
+    window.addEventListener('naizon_auth_change', handleAuthEvent)
+    window.addEventListener('storage', handleAuthEvent)
+
+    return () => {
+      unsubscribe()
+      window.removeEventListener('naizon_auth_change', handleAuthEvent)
+      window.removeEventListener('storage', handleAuthEvent)
+    }
   }, [])
 
   const handleAuthSubmit = async (e) => {
@@ -249,6 +282,8 @@ export default function Navbar() {
   const handleLogout = async () => {
     try {
       await logoutUser()
+      saveStoredAuthUser(null)
+      setCurrentUser(null)
       setUserMenuOpen(false)
     } catch (err) {
       console.error('Logout error:', err)
@@ -468,15 +503,24 @@ export default function Navbar() {
                   title={currentUser.displayName || currentUser.email}
                   className="relative flex h-10 w-10 items-center justify-center rounded-full transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#fd5001] focus:ring-offset-2 active:scale-95"
                 >
-                  <div
-                    className={`grid h-10 w-10 place-items-center rounded-full text-sm font-black uppercase text-white shadow-sm transition-shadow hover:shadow-md ${
-                      isSuperAdmin(currentUser)
-                        ? 'bg-gradient-to-tr from-amber-500 via-[#fd5001] to-amber-600 ring-2 ring-amber-400/50'
-                        : 'bg-[#fd5001] ring-2 ring-neutral-200'
-                    }`}
-                  >
-                    {(currentUser.displayName || currentUser.email || 'M')[0].toUpperCase()}
-                  </div>
+                  {currentUser.photoURL && !avatarError ? (
+                    <img
+                      src={currentUser.photoURL}
+                      alt={currentUser.displayName || 'Profile'}
+                      onError={() => setAvatarError(true)}
+                      className="h-10 w-10 rounded-full object-cover ring-2 ring-neutral-300 transition hover:ring-[#fd5001]"
+                    />
+                  ) : (
+                    <div
+                      className={`grid h-10 w-10 place-items-center rounded-full text-sm font-black uppercase text-white shadow-sm transition-shadow hover:shadow-md ${
+                        isSuperAdmin(currentUser)
+                          ? 'bg-gradient-to-tr from-amber-500 via-[#fd5001] to-amber-600 ring-2 ring-amber-400/50'
+                          : 'bg-[#fd5001] ring-2 ring-neutral-200'
+                      }`}
+                    >
+                      {(currentUser.displayName || currentUser.email || 'M')[0].toUpperCase()}
+                    </div>
+                  )}
                   {isSuperAdmin(currentUser) && (
                     <span className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-amber-500 text-[9px] text-slate-950 font-black ring-2 ring-white shadow-sm">
                       <Crown size={9} strokeWidth={3} />
@@ -501,6 +545,10 @@ export default function Navbar() {
                             <Crown size={12} className="text-amber-500" />
                             Admin
                           </span>
+                        ) : canAccessLeads(currentUser) ? (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold text-blue-700 ring-1 ring-blue-400/40 whitespace-nowrap">
+                            Lead Manager
+                          </span>
                         ) : (
                           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 shrink-0">
                             Client
@@ -510,32 +558,20 @@ export default function Navbar() {
                     </div>
 
                     <div className="py-1">
-                      {isSuperAdmin(currentUser) ? (
-                        <>
-                          <a
-                            href="/login"
-                            onClick={() => setUserMenuOpen(false)}
-                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-900 bg-amber-50/80 transition hover:bg-amber-100/80 mb-1"
-                          >
-                            <span className="flex items-center gap-2">
-                              <Crown size={14} className="text-amber-600" />
-                              <span>Admin Dashboard</span>
-                            </span>
-                            <span className="text-[10px] font-semibold text-amber-700 uppercase bg-amber-200/60 px-1.5 py-0.5 rounded">Owner</span>
-                          </a>
-
-                          <a
-                            href="/data"
-                            onClick={() => setUserMenuOpen(false)}
-                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 hover:text-[#fd5001] mb-1"
-                          >
-                            <span className="flex items-center gap-2">
-                              <FileText size={14} className="text-neutral-500" />
-                              <span>Enquiries & Leads Database</span>
-                            </span>
-                            <ExternalLink size={12} className="text-neutral-400" />
-                          </a>
-                        </>
+                      {isSuperAdmin(currentUser) || canAccessLeads(currentUser) ? (
+                        <a
+                          href="/login"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-900 bg-amber-50/80 transition hover:bg-amber-100/80 mb-1"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Crown size={14} className="text-amber-600" />
+                            <span>{isSuperAdmin(currentUser) ? 'Admin Dashboard' : 'Leads & Enquiries Portal'}</span>
+                          </span>
+                          <span className="text-[10px] font-semibold text-amber-700 uppercase bg-amber-200/60 px-1.5 py-0.5 rounded">
+                            {isSuperAdmin(currentUser) ? 'Owner' : 'Team'}
+                          </span>
+                        </a>
                       ) : (
                         <a
                           href="/login"
@@ -585,15 +621,24 @@ export default function Navbar() {
                 aria-label="Account Dashboard"
                 className="relative grid h-9 w-9 place-items-center rounded-full transition-transform active:scale-95"
               >
-                <div
-                  className={`grid h-9 w-9 place-items-center rounded-full text-xs font-black uppercase text-white shadow-sm ${
-                    isSuperAdmin(currentUser)
-                      ? 'bg-gradient-to-tr from-amber-500 via-[#fd5001] to-amber-600 ring-2 ring-amber-400/50'
-                      : 'bg-[#fd5001] ring-2 ring-neutral-200'
-                  }`}
-                >
-                  {(currentUser.displayName || currentUser.email || 'M')[0].toUpperCase()}
-                </div>
+                {currentUser.photoURL && !avatarError ? (
+                  <img
+                    src={currentUser.photoURL}
+                    alt={currentUser.displayName || 'Profile'}
+                    onError={() => setAvatarError(true)}
+                    className="h-9 w-9 rounded-full object-cover ring-2 ring-neutral-300"
+                  />
+                ) : (
+                  <div
+                    className={`grid h-9 w-9 place-items-center rounded-full text-xs font-black uppercase text-white shadow-sm ${
+                      isSuperAdmin(currentUser)
+                        ? 'bg-gradient-to-tr from-amber-500 via-[#fd5001] to-amber-600 ring-2 ring-amber-400/50'
+                        : 'bg-[#fd5001] ring-2 ring-neutral-200'
+                    }`}
+                  >
+                    {(currentUser.displayName || currentUser.email || 'M')[0].toUpperCase()}
+                  </div>
+                )}
                 {isSuperAdmin(currentUser) && (
                   <span className="absolute -bottom-0.5 -right-0.5 grid h-3.5 w-3.5 place-items-center rounded-full bg-amber-500 text-[8px] text-slate-950 font-black ring-1 ring-white">
                     <Crown size={8} strokeWidth={3} />
