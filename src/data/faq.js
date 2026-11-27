@@ -9,3 +9,66 @@ export const faqs = [
   ['How is software pricing and timeline determined?', 'Pricing and timelines are scoped transparently based on your feature set, target platforms (Web, Mobile, Windows, SaaS), backend complexity, and integrations. We provide a clear estimate following an initial discovery discussion.'],
   ['Do you provide post-launch maintenance and updates?', 'Yes. We offer ongoing maintenance, cloud server monitoring, bug fixes, security patches, and feature updates so your software continues running reliably.']
 ]
+
+export const faqCategories = [
+  {
+    id: 'general',
+    name: 'General & Services',
+    questions: [
+      {
+        q: faqs[0][0],
+        a: faqs[0][1],
+      },
+      {
+        q: faqs[6][0],
+        a: faqs[6][1],
+      },
+      {
+        q: faqs[5][0],
+        a: faqs[5][1],
+      },
+    ],
+  },
+  {
+    id: 'web-saas',
+    name: 'SaaS & Web Apps',
+    questions: [
+      {
+        q: faqs[1][0],
+        a: faqs[1][1],
+      },
+      {
+        q: faqs[4][0],
+        a: faqs[4][1],
+      },
+    ],
+  },
+  {
+    id: 'mobile-desktop',
+    name: 'Mobile & Windows',
+    questions: [
+      {
+        q: faqs[3][0],
+        a: faqs[3][1],
+      },
+      {
+        q: faqs[2][0],
+        a: faqs[2][1],
+      },
+    ],
+  },
+  {
+    id: 'pricing-support',
+    name: 'Pricing & Support',
+    questions: [
+      {
+        q: faqs[7][0],
+        a: faqs[7][1],
+      },
+      {
+        q: faqs[8][0],
+        a: faqs[8][1],
+      },
+    ],
+  },
+]
