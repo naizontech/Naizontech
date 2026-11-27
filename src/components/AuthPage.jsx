@@ -44,6 +44,7 @@ import {
   Send,
   RefreshCw,
   AlertTriangle,
+  Copy,
 } from 'lucide-react'
 
 export default function AuthPage({ initialTab = 'login' }) {
@@ -58,6 +59,12 @@ export default function AuthPage({ initialTab = 'login' }) {
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState('')
   const [authSuccess, setAuthSuccess] = useState('')
+
+  // Avatar image fallback state
+  const [avatarFailed, setAvatarFailed] = useState(false)
+
+  // Copy to clipboard state
+  const [copiedField, setCopiedField] = useState('')
 
   // Show/Hide Password states
   const [showPassword, setShowPassword] = useState(false)
@@ -106,6 +113,32 @@ export default function AuthPage({ initialTab = 'login' }) {
   // Password matching validation checks
   const passwordsMatch = form.password && form.confirmPassword && form.password === form.confirmPassword
   const passwordsMismatch = form.confirmPassword && form.password !== form.confirmPassword
+
+  // Password Strength calculation
+  const getPasswordStrength = (pass) => {
+    if (!pass) return { score: 0, label: '', color: '' }
+    let score = 0
+    if (pass.length >= 6) score += 1
+    if (pass.length >= 8) score += 1
+    if (/[A-Z]/.test(pass) && /[a-z]/.test(pass)) score += 1
+    if (/[0-9]/.test(pass) || /[^A-Za-z0-9]/.test(pass)) score += 1
+
+    if (score <= 1) return { score: 1, label: 'Weak', color: 'bg-red-500' }
+    if (score === 2) return { score: 2, label: 'Fair', color: 'bg-amber-500' }
+    if (score === 3) return { score: 3, label: 'Good', color: 'bg-blue-500' }
+    return { score: 4, label: 'Strong', color: 'bg-emerald-500' }
+  }
+
+  const passStrength = getPasswordStrength(form.password)
+
+  // Clipboard copy helper
+  const copyToClipboard = (text, field) => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(text)
+      setCopiedField(field)
+      setTimeout(() => setCopiedField(''), 2000)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -367,16 +400,17 @@ export default function AuthPage({ initialTab = 'login' }) {
             <div className={`p-6 sm:p-8 border-b ${isAdmin ? 'bg-gradient-to-r from-[#1e1e2f] via-[#241a27] to-[#1e151e] border-amber-500/30' : 'bg-gradient-to-r from-slate-900 to-slate-800 border-slate-800'}`}>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  {/* Avatar with Online Pulse */}
+                  {/* Avatar with Online Pulse & Guaranteed Fallback */}
                   <div className="relative">
-                    {currentUser.photoURL ? (
+                    {currentUser.photoURL && !avatarFailed ? (
                       <img
                         src={currentUser.photoURL}
-                        alt={currentUser.displayName || 'User'}
+                        alt="User Avatar"
+                        onError={() => setAvatarFailed(true)}
                         className="h-16 w-16 rounded-2xl border-2 border-slate-700 object-cover shadow-lg"
                       />
                     ) : (
-                      <div className={`grid h-16 w-16 place-items-center rounded-2xl text-xl font-black uppercase text-white shadow-lg ${isAdmin ? 'bg-gradient-to-br from-amber-500 to-[#fd5001] ring-2 ring-amber-400/50' : 'bg-[#fd5001]'}`}>
+                      <div className={`grid h-16 w-16 place-items-center rounded-2xl text-2xl font-black uppercase text-white shadow-lg ${isAdmin ? 'bg-gradient-to-br from-amber-500 via-[#fd5001] to-[#e04600] ring-2 ring-amber-400/50' : 'bg-[#fd5001]'}`}>
                         {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
                       </div>
                     )}
@@ -389,12 +423,27 @@ export default function AuthPage({ initialTab = 'login' }) {
                   <div>
                     <div className="flex items-center gap-2">
                       <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
-                        {currentUser.displayName || 'Authorized User'}
+                        {currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : 'Authorized User')}
                       </h1>
                     </div>
-                    <p className="mt-0.5 text-xs text-slate-400 font-mono">
-                      {currentUser.email || currentUser.phoneNumber || 'User'}
-                    </p>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <p className="text-xs text-slate-400 font-mono">
+                        {currentUser.email || currentUser.phoneNumber || 'User'}
+                      </p>
+                      {currentUser.email && (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(currentUser.email, 'email')}
+                          title="Copy email address"
+                          className="rounded p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition"
+                        >
+                          {copiedField === 'email' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                        </button>
+                      )}
+                      {copiedField === 'email' && (
+                        <span className="text-[10px] text-emerald-400 font-bold">Copied!</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -425,7 +474,7 @@ export default function AuthPage({ initialTab = 'login' }) {
                       <div>
                         <h2 className="text-xs font-bold text-amber-300 uppercase tracking-wider">Email Verification Pending</h2>
                         <p className="mt-0.5 text-xs text-slate-300">
-                          Your email has not been verified yet. Click below to verify your account.
+                          Your email has not been verified yet. Complete verification to activate all enterprise deliverables.
                         </p>
                       </div>
                     </div>
@@ -478,9 +527,20 @@ export default function AuthPage({ initialTab = 'login' }) {
                       {currentUser.emailVerified ? 'Verified Email · Active' : 'Active Session'}
                     </span>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500 truncate font-mono">
-                    UID: {currentUser.uid.slice(0, 16)}...
-                  </p>
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500 font-mono">
+                    <span>UID: {currentUser.uid.slice(0, 14)}...</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(currentUser.uid, 'uid')}
+                      title="Copy full UID"
+                      className="rounded p-0.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition"
+                    >
+                      {copiedField === 'uid' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                    </button>
+                    {copiedField === 'uid' && (
+                      <span className="text-[10px] text-emerald-400 font-bold">Copied!</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -523,11 +583,11 @@ export default function AuthPage({ initialTab = 'login' }) {
                 </div>
               )}
 
-              {/* Actions Footer */}
-              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              {/* Symmetrical & Balanced Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 <a
                   href="/"
-                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#fd5001] px-5 text-sm font-bold text-white shadow-lg shadow-[#fd5001]/25 transition hover:bg-[#e04600] active:scale-[0.99]"
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#fd5001] px-5 text-sm font-bold text-white shadow-lg shadow-[#fd5001]/25 transition hover:bg-[#e04600] active:scale-[0.99]"
                 >
                   <Home size={16} />
                   <span>Return to Website</span>
@@ -536,9 +596,9 @@ export default function AuthPage({ initialTab = 'login' }) {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-5 text-xs font-bold text-red-400 transition hover:bg-red-500/20 active:scale-[0.99]"
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-red-500/20 hover:border-red-500/40 px-5 text-sm font-bold text-slate-300 hover:text-red-300 transition active:scale-[0.99]"
                 >
-                  <LogOut size={15} />
+                  <LogOut size={16} />
                   <span>Sign Out</span>
                 </button>
               </div>
@@ -852,6 +912,32 @@ export default function AuthPage({ initialTab = 'login' }) {
                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
+
+                    {/* Live Password Strength Meter */}
+                    {tab === 'signup' && form.password && (
+                      <div className="mt-2 space-y-1 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-400">Password Strength:</span>
+                          <span className={`font-bold ${
+                            passStrength.score === 1 ? 'text-red-400' :
+                            passStrength.score === 2 ? 'text-amber-400' :
+                            passStrength.score === 3 ? 'text-blue-400' : 'text-emerald-400'
+                          }`}>
+                            {passStrength.label}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1.5 h-1">
+                          {[1, 2, 3, 4].map((step) => (
+                            <div
+                              key={step}
+                              className={`rounded-full transition-all duration-300 ${
+                                step <= passStrength.score ? passStrength.color : 'bg-slate-800'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

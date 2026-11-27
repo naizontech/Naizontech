@@ -472,7 +472,7 @@ export default function Navbar() {
                   }`}>
                     {currentUser.displayName ? currentUser.displayName[0] : (currentUser.email ? currentUser.email[0] : 'U')}
                   </div>
-                  <span className="max-w-[120px] truncate text-[13.5px]">
+                  <span className="max-w-[190px] truncate text-[13.5px]">
                     {currentUser.displayName || currentUser.email.split('@')[0]}
                   </span>
                   {isSuperAdmin(currentUser) && (

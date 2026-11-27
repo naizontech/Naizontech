@@ -123,12 +123,19 @@ export const sendPhoneOtp = async (phoneNumber, appVerifier) => {
 }
 
 // Role & Permissions Configuration
-export const ADMIN_EMAIL = 'muhammadsufiayandev01@gmail.com'
+export const ADMIN_EMAILS = [
+  'muhammadsufiyandev01@gmail.com',
+  'muhammadsufiayandev01@gmail.com',
+]
+
+export const ADMIN_EMAIL = 'muhammadsufiyandev01@gmail.com'
 
 export const isSuperAdmin = (userOrEmail) => {
   if (!userOrEmail) return false
-  const email = typeof userOrEmail === 'string' ? userOrEmail : userOrEmail?.email
-  return (email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase()
+  const email = (typeof userOrEmail === 'string' ? userOrEmail : userOrEmail?.email || '')
+    .trim()
+    .toLowerCase()
+  return ADMIN_EMAILS.some((admin) => admin.toLowerCase() === email)
 }
 
 export const getUserRole = (userOrEmail) => {
