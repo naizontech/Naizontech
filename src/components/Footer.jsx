@@ -1,6 +1,6 @@
 const columns = [
-  ['Services', [['Web & SaaS Applications', '/web-development'], ['Websites & Webpages', '/website-development'], ['Mobile Apps (iOS & Android)', '/mobile-app-development'], ['Windows & Desktop Apps', '/#services'], ['Web Games & Interactive', '/#services'], ['Ecommerce & UI/UX', '/ecommerce-development']]],
-  ['Company', [['About NAIZON', '/about'], ['Careers & Internships', '/careers'], ['Website Guides', '/guides'], ['Work', '/#work'], ['Delhi', '/delhi/website-development'], ['Gurgaon', '/gurgaon/website-development'], ['Contact', '/#contact']]],
+  ['Services', [['Web & SaaS Applications', '/web-development'], ['Websites & Webpages', '/website-development'], ['Mobile Apps (iOS & Android)', '/mobile-app-development'], ['Windows & Desktop Apps', '/#work'], ['Web Games & Interactive', '/#work'], ['Ecommerce & UI/UX', '/ecommerce-development']]],
+  ['Company', [['About NAIZON', '/about'], ['Careers & Internships', '/careers'], ['Client Sign In', '/login'], ['Website Guides', '/guides'], ['Work', '/#work'], ['Delhi', '/delhi/website-development'], ['Gurgaon', '/gurgaon/website-development'], ['Contact', '/#contact']]],
   ['Legal', [['Privacy', '/privacy'], ['Terms', '/terms'], ['Refund Policy', '/refund-policy']]],
 ]
 

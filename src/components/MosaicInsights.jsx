@@ -58,7 +58,7 @@ const mosaicItems = [
     alt: 'NAIZON SaaS Analytics and Real-time Dashboard Interface',
     tag: 'LIVE SAAS',
     title: 'Real-time Production Analytics',
-    href: '/website-development',
+    href: '/web-development',
   },
   {
     type: 'card',
@@ -270,10 +270,10 @@ export default function MosaicInsights() {
 
           <div className="relative z-10 mt-6 flex flex-wrap items-center gap-4">
             <a
-              href="#portfolio"
+              href="/#work"
               className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-6 py-2.5 text-[14px] font-bold text-white backdrop-blur-sm transition-all hover:border-white/40 hover:bg-white/20"
             >
-              <span>View Portfolio &amp; Case Studies</span>
+              <span>Explore What We Engineer</span>
               <ArrowRight size={15} strokeWidth={2.4} />
             </a>
             <span className="text-[12.5px] font-mono text-neutral-400">

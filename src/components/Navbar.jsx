@@ -16,7 +16,24 @@ import {
   Briefcase,
   ExternalLink,
   UserPlus,
+  LogIn,
+  LogOut,
+  User,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react'
+import {
+  auth,
+  signUpWithEmail,
+  loginWithEmail,
+  loginWithGoogle,
+  logoutUser,
+  resetUserPassword,
+  onAuthStateChanged,
+} from '../utils/firebase'
 
 const navigationData = [
   {
@@ -54,13 +71,13 @@ const navigationData = [
           },
           {
             label: 'Windows & Desktop Software',
-            href: '/#services',
+            href: '/#work',
             description: 'High-performance desktop apps & automated business tooling.',
             icon: Layers,
           },
           {
             label: 'Web Games & Interactive',
-            href: '/#services',
+            href: '/#work',
             description: 'Engaging HTML5 2D games, physics & interactive experiences.',
             icon: Sparkles,
           },
@@ -124,11 +141,108 @@ export default function Navbar() {
   const [activeDropdown, setActiveDropdown] = useState(null)
   const [mobileExpanded, setMobileExpanded] = useState(null)
   const [careerModal, setCareerModal] = useState(false)
-  const [signUpModal, setSignUpModal] = useState(false)
-  const [signUpSubmitted, setSignUpSubmitted] = useState(false)
-  const [signUpData, setSignUpData] = useState({ name: '', email: '', projectType: 'SaaS Platform' })
+
+  // Firebase Auth State
+  const [currentUser, setCurrentUser] = useState(null)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [authTab, setAuthTab] = useState('signup') // 'signup' | 'login' | 'forgot'
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState('')
+  const [authSuccess, setAuthSuccess] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [authForm, setAuthForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+  })
+
   const timeoutRef = useRef(null)
   const navRef = useRef(null)
+  const userMenuRef = useRef(null)
+
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault()
+    setAuthError('')
+    setAuthSuccess('')
+    setAuthLoading(true)
+
+    try {
+      if (authTab === 'signup') {
+        if (!authForm.email || !authForm.password) {
+          throw new Error('Please enter both email and password.')
+        }
+        if (authForm.password.length < 6) {
+          throw new Error('Password must be at least 6 characters.')
+        }
+        await signUpWithEmail(authForm.email, authForm.password, authForm.name)
+        setAuthModalOpen(false)
+        setAuthForm({ name: '', email: '', password: '' })
+      } else if (authTab === 'login') {
+        if (!authForm.email || !authForm.password) {
+          throw new Error('Please enter both email and password.')
+        }
+        await loginWithEmail(authForm.email, authForm.password)
+        setAuthModalOpen(false)
+        setAuthForm({ name: '', email: '', password: '' })
+      } else if (authTab === 'forgot') {
+        if (!authForm.email) {
+          throw new Error('Please enter your email address.')
+        }
+        await resetUserPassword(authForm.email)
+        setAuthSuccess('Password reset link sent to your email! Please check your inbox.')
+      }
+    } catch (err) {
+      let msg = err.message || 'Authentication failed.'
+      if (err.code === 'auth/email-already-in-use') {
+        msg = 'This email is already registered. Please sign in.'
+      } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        msg = 'Invalid email or password. Please try again.'
+      } else if (err.code === 'auth/user-not-found') {
+        msg = 'No account found with this email. Please sign up.'
+      } else if (err.code === 'auth/weak-password') {
+        msg = 'Password should be at least 6 characters.'
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        msg = 'Sign-in cancelled.'
+      }
+      setAuthError(msg)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleGoogleLogin = async () => {
+    setAuthError('')
+    setAuthSuccess('')
+    setAuthLoading(true)
+    try {
+      await loginWithGoogle()
+      setAuthModalOpen(false)
+    } catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user') {
+        setAuthError(err.message || 'Google sign-in failed.')
+      }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser()
+      setUserMenuOpen(false)
+    } catch (err) {
+      console.error('Logout error:', err)
+    }
+  }
 
   // Close dropdown on outside click or Escape
   useEffect(() => {
@@ -333,19 +447,58 @@ export default function Navbar() {
 
           {/* Right Action Buttons */}
           <div className="hidden items-center gap-3.5 lg:flex">
-            {/* [Sign Up] */}
-            <button
-              type="button"
-              onClick={() => {
-                setSignUpSubmitted(false)
-                setSignUpModal(true)
-              }}
-              aria-label="Client Sign Up"
-              className="inline-flex h-11 items-center gap-2 rounded-lg border border-neutral-300 px-4 text-[14px] font-bold text-neutral-800 transition-colors hover:border-[#fd5001]/50 hover:bg-[#fd5001]/5 hover:text-[#fd5001]"
-            >
-              <UserPlus size={17} className="text-[#fd5001]" />
-              <span>Sign Up</span>
-            </button>
+            {currentUser ? (
+              <div ref={userMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setUserMenuOpen((prev) => !prev)}
+                  className="inline-flex h-11 items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3.5 text-[14px] font-bold text-neutral-800 transition-colors hover:border-[#fd5001] hover:bg-neutral-50 shadow-sm"
+                >
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#fd5001] text-xs font-bold text-white uppercase shadow-sm">
+                    {currentUser.displayName ? currentUser.displayName[0] : (currentUser.email ? currentUser.email[0] : 'U')}
+                  </div>
+                  <span className="max-w-[120px] truncate text-[13.5px]">
+                    {currentUser.displayName || currentUser.email.split('@')[0]}
+                  </span>
+                  <ChevronDown size={14} className="text-neutral-500" />
+                </button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 top-12 z-50 w-60 rounded-xl border border-neutral-200 bg-white p-2 shadow-xl animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="border-b border-neutral-100 px-3 py-2 text-left">
+                      <p className="text-xs font-bold text-neutral-900 truncate">
+                        {currentUser.displayName || 'Client Account'}
+                      </p>
+                      <p className="text-[11px] text-neutral-500 truncate">
+                        {currentUser.email}
+                      </p>
+                      <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Firebase Active
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-red-600 transition hover:bg-red-50"
+                    >
+                      <LogOut size={15} />
+                      <span>Sign Out (Logout)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <a
+                href="/login"
+                aria-label="Sign In"
+                className="inline-flex h-11 items-center gap-2 rounded-lg border border-neutral-300 px-4 text-[14px] font-bold text-neutral-800 transition-colors hover:border-[#fd5001]/50 hover:bg-[#fd5001]/5 hover:text-[#fd5001]"
+              >
+                <LogIn size={16} className="text-[#fd5001]" />
+                <span>Sign In</span>
+              </a>
+            )}
 
             {/* [Contact Us] */}
             <a
@@ -461,18 +614,50 @@ export default function Navbar() {
 
           {/* Mobile Action Buttons */}
           <div className="mt-8 space-y-3 pt-4">
-            <button
-              type="button"
-              onClick={() => {
-                setMobileOpen(false)
-                setSignUpSubmitted(false)
-                setSignUpModal(true)
-              }}
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-neutral-300 px-5 text-[14.5px] font-bold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              <UserPlus size={18} className="text-[#fd5001]" />
-              <span>Sign Up</span>
-            </button>
+            {currentUser ? (
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="flex items-center gap-3">
+                  {currentUser.photoURL ? (
+                    <img
+                      src={currentUser.photoURL}
+                      alt={currentUser.displayName || 'User'}
+                      className="h-10 w-10 rounded-full border border-[#fd5001]/30 object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-10 w-10 place-items-center rounded-full bg-[#fd5001] font-bold text-white">
+                      {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-neutral-900">
+                      {currentUser.displayName || 'Client Account'}
+                    </p>
+                    <p className="truncate text-xs text-neutral-500">{currentUser.email}</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleLogout()
+                    setMobileOpen(false)
+                  }}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-white py-2 text-xs font-bold text-red-600 transition hover:bg-red-50"
+                >
+                  <LogOut size={14} />
+                  <span>Sign Out (Logout)</span>
+                </button>
+              </div>
+            ) : (
+              <a
+                href="/login"
+                onClick={() => setMobileOpen(false)}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-neutral-300 px-5 text-[14.5px] font-bold text-neutral-800 transition hover:border-[#fd5001]/50 hover:bg-[#fd5001]/5 hover:text-[#fd5001]"
+              >
+                <LogIn size={18} className="text-[#fd5001]" />
+                <span>Sign In</span>
+              </a>
+            )}
 
             <a
               href="/#contact"
@@ -490,112 +675,286 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Sign Up Modal (Client Project & Engineering Access) */}
-      {signUpModal && (
+      {/* Firebase Authentication Modal */}
+      {authModalOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="relative w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl sm:p-8">
             <button
               type="button"
-              onClick={() => setSignUpModal(false)}
+              onClick={() => setAuthModalOpen(false)}
               className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
               aria-label="Close modal"
             >
               <X size={18} />
             </button>
 
-            <span className="inline-block rounded-full bg-[#fd5001]/10 px-3.5 py-1 text-xs font-extrabold uppercase tracking-wider text-[#fd5001]">
-              Client Access
-            </span>
+            {/* Favicon Branded Header */}
+            <div className="flex items-center gap-2.5">
+              <img
+                src="/favicon/favicon-192.png"
+                alt="NAIZON Logo"
+                className="h-8 w-8 rounded-lg object-contain p-1 bg-[#fd5001]/10 ring-1 ring-[#fd5001]/20"
+              />
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-neutral-900">
+                  NAIZON
+                </span>
+                <span className="ml-2 text-[11px] font-medium text-neutral-400">• Secure Access</span>
+              </div>
+            </div>
 
             <h3 className="mt-3 text-2xl font-bold tracking-tight text-neutral-950">
-              Create Client Account
+              {authTab === 'signup' && 'Create Your Account'}
+              {authTab === 'login' && 'Welcome Back'}
+              {authTab === 'forgot' && 'Reset Your Password'}
             </h3>
 
-            <p className="mt-2 text-sm leading-relaxed text-neutral-600">
-              Sign up to track project sprint milestones, collaborate with your engineering team, and access architectural deliverables.
+            <p className="mt-1 text-xs text-neutral-600">
+              {authTab === 'signup' && 'Sign up to track project milestones, access client deliverables, and collaborate with engineering.'}
+              {authTab === 'login' && 'Sign in to access your client dashboard, live preview environments, and sprint updates.'}
+              {authTab === 'forgot' && 'Enter your email address and we will send you a link to reset your account password.'}
             </p>
 
-            {signUpSubmitted ? (
-              <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-center">
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-white font-bold mb-2">
-                  ✓
-                </div>
-                <h4 className="text-base font-bold text-emerald-950">Account Request Received!</h4>
-                <p className="mt-1 text-xs text-emerald-800">
-                  Our engineering leads will provision your staging environment and email confirmation to <strong>{signUpData.email}</strong> shortly.
-                </p>
+            {/* Tab switchers if not forgot */}
+            {authTab !== 'forgot' && (
+              <div className="mt-4 flex rounded-lg border border-neutral-200 bg-neutral-100 p-1">
                 <button
                   type="button"
-                  onClick={() => setSignUpModal(false)}
-                  className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg bg-emerald-600 px-5 text-xs font-bold text-white hover:bg-emerald-700"
+                  onClick={() => {
+                    setAuthTab('signup')
+                    setAuthError('')
+                    setAuthSuccess('')
+                  }}
+                  className={`flex-1 rounded-md py-1.5 text-xs font-bold transition ${
+                    authTab === 'signup'
+                      ? 'bg-white text-neutral-950 shadow-sm'
+                      : 'text-neutral-600 hover:text-neutral-950'
+                  }`}
                 >
-                  Done
+                  Sign Up
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthTab('login')
+                    setAuthError('')
+                    setAuthSuccess('')
+                  }}
+                  className={`flex-1 rounded-md py-1.5 text-xs font-bold transition ${
+                    authTab === 'login'
+                      ? 'bg-white text-neutral-950 shadow-sm'
+                      : 'text-neutral-600 hover:text-neutral-950'
+                  }`}
+                >
+                  Log In
                 </button>
               </div>
-            ) : (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  if (signUpData.name && signUpData.email) {
-                    setSignUpSubmitted(true)
-                  }
-                }}
-                className="mt-5 space-y-3.5"
-              >
+            )}
+
+            {/* Error & Success Messages */}
+            {authError && (
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600" />
+                <span className="flex-1">{authError}</span>
+              </div>
+            )}
+
+            {authSuccess && (
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+                <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+                <span className="flex-1">{authSuccess}</span>
+              </div>
+            )}
+
+            {/* Google Sign In Button */}
+            {authTab !== 'forgot' && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={handleGoogleLogin}
+                  disabled={authLoading}
+                  className="flex min-h-11 w-full items-center justify-center gap-3 rounded-lg border border-neutral-300 bg-white px-4 text-xs font-bold text-neutral-800 shadow-sm transition hover:bg-neutral-50 disabled:opacity-50"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                    />
+                  </svg>
+                  <span>Continue with Google</span>
+                </button>
+
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-neutral-200" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-white px-2 text-neutral-400">or continue with email</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Email Form */}
+            <form onSubmit={handleAuthSubmit} className="mt-3 space-y-3">
+              {authTab === 'signup' && (
                 <div>
                   <label className="block text-xs font-bold text-neutral-700 mb-1">Full Name</label>
                   <input
                     type="text"
                     required
-                    value={signUpData.name}
-                    onChange={(e) => setSignUpData({ ...signUpData, name: e.target.value })}
+                    value={authForm.name}
+                    onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })}
                     placeholder="e.g. Alex Morgan"
-                    className="w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
+                    className="w-full rounded-lg border border-neutral-300 px-3.5 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
                   />
                 </div>
+              )}
 
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 mb-1">
+                  {authTab === 'signup' ? 'Work Email' : 'Email Address'}
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={authForm.email}
+                  onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
+                  placeholder="you@company.com"
+                  className="w-full rounded-lg border border-neutral-300 px-3.5 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
+                />
+              </div>
+
+              {authTab !== 'forgot' && (
                 <div>
-                  <label className="block text-xs font-bold text-neutral-700 mb-1">Work Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={signUpData.email}
-                    onChange={(e) => setSignUpData({ ...signUpData, email: e.target.value })}
-                    placeholder="alex@company.com"
-                    className="w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-neutral-700">Password</label>
+                    {authTab === 'login' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthTab('forgot')
+                          setAuthError('')
+                          setAuthSuccess('')
+                        }}
+                        className="text-[11px] font-semibold text-[#fd5001] hover:underline"
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={authForm.password}
+                      onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                      placeholder="••••••••"
+                      minLength={6}
+                      className="w-full rounded-lg border border-neutral-300 px-3.5 py-2 pr-10 text-sm text-neutral-900 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
+              )}
 
-                <div>
-                  <label className="block text-xs font-bold text-neutral-700 mb-1">Primary Interest</label>
-                  <select
-                    value={signUpData.projectType}
-                    onChange={(e) => setSignUpData({ ...signUpData, projectType: e.target.value })}
-                    className="w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001] bg-white"
-                  >
-                    <option value="SaaS Platform">Custom SaaS Platform</option>
-                    <option value="Web Application">Modern Web Application</option>
-                    <option value="Windows Desktop">Windows Desktop Software</option>
-                    <option value="Mobile App">Mobile Application (iOS/Android)</option>
-                    <option value="Interactive Web Game">Interactive Web Game & 2D</option>
-                  </select>
-                </div>
 
-                <div className="pt-2">
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#fd5001] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#e04600] active:scale-[0.98] disabled:opacity-50"
+                >
+                  {authLoading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : authTab === 'signup' ? (
+                    <>
+                      <UserPlus size={16} />
+                      <span>Create Account</span>
+                    </>
+                  ) : authTab === 'login' ? (
+                    <>
+                      <LogIn size={16} />
+                      <span>Sign In</span>
+                    </>
+                  ) : (
+                    <span>Send Reset Link</span>
+                  )}
+                </button>
+              </div>
+
+              {authTab === 'forgot' && (
+                <div className="text-center pt-1">
                   <button
-                    type="submit"
-                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#fd5001] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#e04600] active:scale-[0.98]"
+                    type="button"
+                    onClick={() => {
+                      setAuthTab('login')
+                      setAuthError('')
+                      setAuthSuccess('')
+                    }}
+                    className="text-xs font-semibold text-neutral-600 hover:text-[#fd5001]"
                   >
-                    <UserPlus size={16} />
-                    <span>Create Client Account</span>
+                    &larr; Back to Sign In
                   </button>
                 </div>
+              )}
 
-                <p className="text-center text-[11px] text-neutral-500">
-                  By signing up, you agree to our terms of technical service and NDAs.
-                </p>
-              </form>
-            )}
+              <p className="text-center text-[11px] text-neutral-500">
+                {authTab === 'signup' && (
+                  <span>
+                    Already have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthTab('login')
+                        setAuthError('')
+                        setAuthSuccess('')
+                      }}
+                      className="font-bold text-[#fd5001] hover:underline"
+                    >
+                      Sign In
+                    </button>
+                  </span>
+                )}
+                {authTab === 'login' && (
+                  <span>
+                    Don&apos;t have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthTab('signup')
+                        setAuthError('')
+                        setAuthSuccess('')
+                      }}
+                      className="font-bold text-[#fd5001] hover:underline"
+                    >
+                      Sign Up
+                    </button>
+                  </span>
+                )}
+              </p>
+            </form>
           </div>
         </div>
       )}

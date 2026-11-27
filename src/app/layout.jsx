@@ -1,4 +1,5 @@
 import '../index.css'
+import FirebaseAnalytics from '../components/FirebaseAnalytics'
 
 export const viewport = {
   themeColor: '#f8f8f5',
@@ -58,6 +59,7 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body className="m-0 overflow-x-hidden overscroll-y-none bg-[#f8f8f5] text-[#172033] antialiased">
+        <FirebaseAnalytics />
         {children}
       </body>
     </html>

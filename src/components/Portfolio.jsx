@@ -38,7 +38,7 @@ const engineeredProducts = [
       'Robust native Windows desktop applications and local productivity utilities built for high-throughput enterprise tasks.',
     image: '/images/work/work-filewala.jpg',
     imageAlt: 'Windows desktop application and productivity tool by Naizon',
-    href: '/website-development',
+    href: '/#contact',
   },
   {
     category: 'Webpages & Commerce',

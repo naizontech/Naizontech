@@ -3,9 +3,9 @@ import LocationPage from '../../../components/LocationPage'
 const path = '/gurgaon/website-development'
 
 export const metadata = {
-  title: 'Website Development Company in Gurgaon | NAIZON',
+  title: 'Software & Web Development Company in Gurgaon | NAIZON',
   description:
-    'Website development company serving Gurgaon businesses with custom websites, web applications, ecommerce solutions and responsive design.',
+    'Full-cycle software and website development company in Gurgaon building scalable web apps, client SaaS platforms, mobile apps, and high-performance digital systems.',
   alternates: {
     canonical: `https://naizon.in${path}`,
   },
