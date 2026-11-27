@@ -45,7 +45,10 @@ import {
   RefreshCw,
   AlertTriangle,
   Copy,
+  Search,
+  Filter,
 } from 'lucide-react'
+import { supabase } from '../utils/supabase/client'
 
 export default function AuthPage({ initialTab = 'login' }) {
   const router = useRouter()
@@ -88,6 +91,41 @@ export default function AuthPage({ initialTab = 'login' }) {
   const [confirmationResult, setConfirmationResult] = useState(null)
   const [otpSent, setOtpSent] = useState(false)
 
+  // Admin Dashboard Enquiries State
+  const [enquiries, setEnquiries] = useState([])
+  const [loadingEnquiries, setLoadingEnquiries] = useState(false)
+  const [enquiryFilter, setEnquiryFilter] = useState('All')
+  const [enquirySearch, setEnquirySearch] = useState('')
+
+  const loadEnquiries = async () => {
+    setLoadingEnquiries(true)
+    try {
+      const { data, error } = await supabase
+        .from('enquiries')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (!error && data) {
+        setEnquiries(data)
+      }
+    } catch (err) {
+      console.warn('Enquiries load notice:', err)
+    } finally {
+      setLoadingEnquiries(false)
+    }
+  }
+
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return 'Recently'
+    try {
+      return new Intl.DateTimeFormat('en-IN', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date(dateStr))
+    } catch {
+      return String(dateStr)
+    }
+  }
+
   useEffect(() => {
     if (modeParam === 'signup') setTab('signup')
     else if (modeParam === 'login') setTab('login')
@@ -98,6 +136,9 @@ export default function AuthPage({ initialTab = 'login' }) {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user)
       setLoadingUser(false)
+      if (user && isSuperAdmin(user)) {
+        loadEnquiries()
+      }
     })
     return () => unsubscribe()
   }, [])
@@ -300,13 +341,31 @@ export default function AuthPage({ initialTab = 'login' }) {
 
   const isAdmin = isSuperAdmin(currentUser)
 
+  const filteredEnquiries = enquiries.filter((item) => {
+    const matchesFilter =
+      enquiryFilter === 'All' ||
+      (item.service && item.service.toLowerCase().includes(enquiryFilter.toLowerCase()))
+    const q = enquirySearch.toLowerCase().trim()
+    const matchesSearch =
+      !q ||
+      (item.name && item.name.toLowerCase().includes(q)) ||
+      (item.email && item.email.toLowerCase().includes(q)) ||
+      (item.phone && item.phone.toLowerCase().includes(q)) ||
+      (item.service && item.service.toLowerCase().includes(q)) ||
+      (item.details && item.details.toLowerCase().includes(q)) ||
+      (item.budget && item.budget.toLowerCase().includes(q))
+    return matchesFilter && matchesSearch
+  })
+
   return (
     <div className="min-h-screen bg-[#0e131f] text-slate-100 flex flex-col justify-between py-10 px-4 sm:px-6 lg:px-8 selection:bg-[#fd5001] selection:text-white">
       {/* Invisible Recaptcha Container for Phone Auth */}
       <div id="recaptcha-container"></div>
 
       {/* Top Bar with Navigation & Security Badge */}
-      <header className="mx-auto w-full max-w-xl flex items-center justify-between pb-6 border-b border-slate-800/80">
+      <header className={`mx-auto w-full flex items-center justify-between pb-6 border-b border-slate-800/80 transition-all duration-200 ${
+        currentUser && isAdmin ? 'max-w-6xl' : 'max-w-xl'
+      }`}>
         <a
           href="/"
           className="inline-flex items-center gap-2 text-xs font-bold text-slate-400 transition hover:text-[#fd5001]"
@@ -315,14 +374,24 @@ export default function AuthPage({ initialTab = 'login' }) {
           <span>Back to NAIZON</span>
         </a>
 
-        <div className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
-          <ShieldCheck size={14} className="text-emerald-400" />
-          <span>256-bit Encrypted Session</span>
+        <div className="flex items-center gap-2.5">
+          {currentUser && isAdmin && (
+            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 px-3 py-1 text-xs font-bold text-amber-400">
+              <Crown size={13} className="text-amber-400" />
+              <span>Super Admin Console</span>
+            </span>
+          )}
+          <div className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
+            <ShieldCheck size={14} className="text-emerald-400" />
+            <span>256-bit Encrypted Session</span>
+          </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="mx-auto w-full max-w-xl py-6">
+      <main className={`mx-auto w-full py-6 transition-all duration-200 ${
+        currentUser && isAdmin ? 'max-w-6xl' : 'max-w-xl'
+      }`}>
         
         {/* Verification Pending Screen (Shown right after signup) */}
         {verificationPendingEmail ? (
@@ -392,105 +461,381 @@ export default function AuthPage({ initialTab = 'login' }) {
             </div>
           </div>
         ) : currentUser ? (
-          /* ================================================================ */
-          /* MINIMALIST & LIGHTWEIGHT PROFILE VIEW                            */
-          /* ================================================================ */
-          <div className="rounded-2xl border border-slate-800 bg-[#161c2d] p-7 shadow-2xl sm:p-8 animate-in fade-in duration-200 text-center">
-            {/* Avatar with Online Indicator */}
-            <div className="relative mx-auto w-fit">
-              {currentUser.photoURL && !avatarFailed ? (
-                <img
-                  src={currentUser.photoURL}
-                  alt="User Avatar"
-                  onError={() => setAvatarFailed(true)}
-                  className="h-16 w-16 rounded-full border-2 border-slate-700 object-cover shadow-md mx-auto"
-                />
-              ) : (
-                <div className={`grid h-16 w-16 place-items-center rounded-full text-2xl font-black uppercase text-white shadow-md mx-auto ${
-                  isAdmin ? 'bg-gradient-to-tr from-amber-500 to-[#fd5001] ring-2 ring-amber-400/40' : 'bg-[#fd5001]'
-                }`}>
-                  {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
-                </div>
-              )}
-              <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5">
-                <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-[#161c2d] bg-emerald-500" />
-              </span>
-            </div>
+          isAdmin ? (
+            /* ================================================================ */
+            /* EXECUTIVE ADMIN DASHBOARD (SUPER ADMIN CONSOLE)                  */
+            /* ================================================================ */
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Header Banner */}
+              <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-[#161c2d] p-6 sm:p-8 shadow-2xl">
+                <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-gradient-to-br from-amber-500/10 to-[#fd5001]/10 blur-3xl" />
 
-            {/* Name & Role Badge */}
-            <div className="mt-4 flex items-center justify-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-white">
-                {currentUser.displayName || 'Authorized User'}
-              </h1>
-              {isAdmin ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-bold text-amber-400 ring-1 ring-amber-500/30">
-                  <Crown size={12} className="text-amber-400" />
-                  Admin
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+                  <div className="flex items-center gap-4">
+                    {/* Admin Avatar */}
+                    <div className="relative shrink-0">
+                      <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-tr from-amber-500 to-[#fd5001] text-2xl font-black text-white shadow-lg ring-2 ring-amber-400/40">
+                        {(currentUser.displayName || currentUser.email || 'M')[0].toUpperCase()}
+                      </div>
+                      <span className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full bg-amber-500 text-slate-950 ring-2 ring-[#161c2d]">
+                        <Crown size={12} strokeWidth={3} />
+                      </span>
+                    </div>
+
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                          {currentUser.displayName || 'Muhammad Sufiyan'}
+                        </h1>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
+                          <Crown size={12} className="text-amber-400" />
+                          Super Admin
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-mono text-slate-400">
+                        <span>{currentUser.email}</span>
+                        <span className="text-slate-600">·</span>
+                        <span className="text-emerald-400 flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Full Root Control
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Header Actions */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={loadEnquiries}
+                      disabled={loadingEnquiries}
+                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 text-xs font-bold text-slate-200 transition hover:bg-slate-700 active:scale-95 disabled:opacity-50"
+                      title="Reload customer enquiries"
+                    >
+                      <RefreshCw size={14} className={loadingEnquiries ? 'animate-spin text-amber-400' : ''} />
+                      <span>{loadingEnquiries ? 'Loading...' : 'Refresh'}</span>
+                    </button>
+
+                    <a
+                      href="/data"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20 active:scale-95"
+                    >
+                      <FileText size={14} />
+                      <span>Raw Table (/data)</span>
+                      <ExternalLink size={12} />
+                    </a>
+
+                    <a
+                      href="/"
+                      className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#fd5001] px-4 text-xs font-bold text-white transition hover:bg-[#e04600] shadow-md shadow-[#fd5001]/25 active:scale-95"
+                    >
+                      <Home size={14} />
+                      <span>Website</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 text-xs font-bold text-red-300 transition hover:bg-red-500/20 active:scale-95"
+                    >
+                      <LogOut size={14} />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3 Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-xl border border-slate-800 bg-[#161c2d] p-5 shadow-lg">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Enquiries</span>
+                    <FileText size={18} className="text-amber-400" />
+                  </div>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="text-3xl font-black text-white">{enquiries.length}</span>
+                    <span className="text-xs text-slate-400">prospects received</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">Live contact inquiries across all services</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-[#161c2d] p-5 shadow-lg">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Recent 7 Days</span>
+                    <Sparkles size={18} className="text-[#fd5001]" />
+                  </div>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="text-3xl font-black text-white">
+                      {enquiries.filter((e) => {
+                        if (!e.created_at) return false
+                        return Date.now() - new Date(e.created_at).getTime() < 7 * 86400000
+                      }).length}
+                    </span>
+                    <span className="text-xs text-emerald-400 font-semibold">Active leads</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">Fresh customer requests requiring follow-up</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-[#161c2d] p-5 shadow-lg">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Infrastructure</span>
+                    <ShieldCheck size={18} className="text-emerald-400" />
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
+                    <span className="text-base font-bold text-emerald-300">Operational & Secure</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">Supabase DB · Firebase Auth · SSL Active</p>
+                </div>
+              </div>
+
+              {/* Inquiries & Leads Feed */}
+              <div className="rounded-2xl border border-slate-800 bg-[#161c2d] p-6 sm:p-7 shadow-2xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800">
+                  <div>
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                      <span>Customer Enquiries & Project Leads</span>
+                      <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-bold text-amber-400">
+                        {filteredEnquiries.length}
+                      </span>
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      Real-time customer enquiries submitted through the NAIZON contact portal.
+                    </p>
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative min-w-[240px] sm:w-72">
+                    <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="text"
+                      value={enquirySearch}
+                      onChange={(e) => setEnquirySearch(e.target.value)}
+                      placeholder="Search name, phone, service..."
+                      className="w-full rounded-xl border border-slate-700 bg-slate-900/90 pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                    />
+                    {enquirySearch && (
+                      <button
+                        type="button"
+                        onClick={() => setEnquirySearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Service Filter Tabs */}
+                <div className="flex flex-wrap items-center gap-2 pt-4 pb-2">
+                  <span className="text-xs font-bold text-slate-400 flex items-center gap-1 mr-1">
+                    <Filter size={12} />
+                    Filter:
+                  </span>
+                  {['All', 'Web', 'Mobile', 'Ecommerce', 'Website'].map((filterName) => (
+                    <button
+                      key={filterName}
+                      type="button"
+                      onClick={() => setEnquiryFilter(filterName)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                        enquiryFilter === filterName
+                          ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                          : 'border border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      {filterName === 'All' ? 'All Services' : filterName}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Inquiries Cards */}
+                <div className="mt-4 space-y-4">
+                  {loadingEnquiries ? (
+                    <div className="space-y-3 py-4">
+                      <div className="h-28 rounded-xl bg-slate-800/50 animate-pulse" />
+                      <div className="h-28 rounded-xl bg-slate-800/50 animate-pulse" />
+                    </div>
+                  ) : filteredEnquiries.length > 0 ? (
+                    filteredEnquiries.map((enquiry) => (
+                      <div
+                        key={enquiry.id || enquiry.created_at}
+                        className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 transition hover:border-slate-700 hover:bg-slate-900/90"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              <h3 className="text-base font-bold text-white">
+                                {enquiry.name || 'Anonymous Prospect'}
+                              </h3>
+                              {enquiry.service && (
+                                <span className="rounded-md bg-[#fd5001]/15 border border-[#fd5001]/30 px-2 py-0.5 text-[11px] font-bold text-[#fd7030]">
+                                  {enquiry.service}
+                                </span>
+                              )}
+                              {enquiry.budget && (
+                                <span className="rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-bold text-emerald-400">
+                                  {enquiry.budget}
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Received on {formatDateTime(enquiry.created_at)}
+                            </p>
+                          </div>
+
+                          {/* Quick Actions */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {enquiry.email && (
+                              <a
+                                href={`mailto:${enquiry.email}?subject=Regarding your enquiry with NAIZON`}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-bold text-slate-200 transition hover:bg-slate-700 hover:text-white"
+                              >
+                                <Mail size={13} className="text-[#fd5001]" />
+                                <span>Email</span>
+                              </a>
+                            )}
+                            {enquiry.phone && (
+                              <a
+                                href={`tel:${enquiry.phone}`}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-bold text-slate-200 transition hover:bg-slate-700 hover:text-white"
+                              >
+                                <Smartphone size={13} className="text-emerald-400" />
+                                <span>Call</span>
+                              </a>
+                            )}
+                            {enquiry.phone && (
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(enquiry.phone, `phone_${enquiry.id}`)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
+                                title="Copy Phone Number"
+                              >
+                                {copiedField === `phone_${enquiry.id}` ? (
+                                  <Check size={13} className="text-emerald-400" />
+                                ) : (
+                                  <Copy size={13} />
+                                )}
+                                <span>{copiedField === `phone_${enquiry.id}` ? 'Copied' : enquiry.phone}</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Details text */}
+                        {enquiry.details && (
+                          <div className="mt-3.5 rounded-lg border border-slate-800/80 bg-slate-950/60 p-3.5 text-xs leading-relaxed text-slate-300 whitespace-pre-wrap font-sans">
+                            {enquiry.details}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 py-12 px-6 text-center">
+                      <FileText size={32} className="mx-auto text-slate-600 mb-3" />
+                      <p className="text-sm font-bold text-slate-300">
+                        {enquirySearch ? 'No enquiries match your search' : 'No enquiries submitted yet'}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
+                        {enquirySearch
+                          ? 'Try searching with a different term or clear the filter.'
+                          : 'When visitors submit the contact form on your website, their leads will show up here live.'}
+                      </p>
+                      <div className="mt-4 flex justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={loadEnquiries}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 px-3.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition"
+                        >
+                          <RefreshCw size={13} />
+                          <span>Check Again</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ================================================================ */
+            /* LIGHTWEIGHT CLIENT ACCOUNT VIEW                                  */
+            /* ================================================================ */
+            <div className="rounded-2xl border border-slate-800 bg-[#161c2d] p-7 shadow-2xl sm:p-8 animate-in fade-in duration-200 text-center">
+              {/* Avatar with Online Indicator */}
+              <div className="relative mx-auto w-fit">
+                {currentUser.photoURL && !avatarFailed ? (
+                  <img
+                    src={currentUser.photoURL}
+                    alt="User Avatar"
+                    onError={() => setAvatarFailed(true)}
+                    className="h-16 w-16 rounded-full border-2 border-slate-700 object-cover shadow-md mx-auto"
+                  />
+                ) : (
+                  <div className="grid h-16 w-16 place-items-center rounded-full bg-[#fd5001] text-2xl font-black uppercase text-white shadow-md mx-auto">
+                    {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
+                  </div>
+                )}
+                <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5">
+                  <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-[#161c2d] bg-emerald-500" />
                 </span>
-              ) : (
+              </div>
+
+              {/* Name & Role Badge */}
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <h1 className="text-xl font-bold tracking-tight text-white">
+                  {currentUser.displayName || 'Authorized User'}
+                </h1>
                 <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-bold text-emerald-400 ring-1 ring-emerald-500/30">
                   Client
                 </span>
-              )}
-            </div>
+              </div>
 
-            {/* Email with Copy */}
-            <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-slate-400 font-mono">
-              <span>{currentUser.email || currentUser.phoneNumber || 'User'}</span>
-              {currentUser.email && (
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(currentUser.email, 'email')}
-                  title="Copy email"
-                  className="text-slate-500 hover:text-slate-300 transition"
-                >
-                  {copiedField === 'email' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                </button>
-              )}
-              {copiedField === 'email' && (
-                <span className="text-[10px] text-emerald-400 font-bold">Copied!</span>
-              )}
-            </div>
+              {/* Email with Copy */}
+              <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-slate-400 font-mono">
+                <span>{currentUser.email || currentUser.phoneNumber || 'User'}</span>
+                {currentUser.email && (
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(currentUser.email, 'email')}
+                    title="Copy email"
+                    className="text-slate-500 hover:text-slate-300 transition"
+                  >
+                    {copiedField === 'email' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                  </button>
+                )}
+                {copiedField === 'email' && (
+                  <span className="text-[10px] text-emerald-400 font-bold">Copied!</span>
+                )}
+              </div>
 
-            {/* Unverified Email Warning (Only if pending) */}
-            {currentUser.email && !currentUser.emailVerified && (
-              <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-left">
-                <div className="flex items-center gap-2 text-xs text-amber-300">
-                  <AlertTriangle size={15} className="shrink-0 text-amber-400" />
-                  <span>Email verification pending</span>
+              {/* Unverified Email Warning (Only if pending) */}
+              {currentUser.email && !currentUser.emailVerified && (
+                <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-left">
+                  <div className="flex items-center gap-2 text-xs text-amber-300">
+                    <AlertTriangle size={15} className="shrink-0 text-amber-400" />
+                    <span>Email verification pending</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={resendCooldown > 0}
+                    className="shrink-0 text-xs font-bold text-amber-400 hover:underline disabled:opacity-50"
+                  >
+                    {resendCooldown > 0 ? `${resendCooldown}s` : 'Verify'}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleResendVerification}
-                  disabled={resendCooldown > 0}
-                  className="shrink-0 text-xs font-bold text-amber-400 hover:underline disabled:opacity-50"
-                >
-                  {resendCooldown > 0 ? `${resendCooldown}s` : 'Verify'}
-                </button>
-              </div>
-            )}
-
-            {authSuccess && (
-              <div className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-300">
-                <CheckCircle2 size={14} className="text-emerald-400" />
-                <span>{authSuccess}</span>
-              </div>
-            )}
-
-            {/* Clean Actions */}
-            <div className="mt-6 space-y-2.5 pt-3 border-t border-slate-800">
-              {isAdmin && (
-                <a
-                  href="/data"
-                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-xs font-bold text-amber-300 transition"
-                >
-                  <Crown size={14} />
-                  <span>Enquiries & Leads Database</span>
-                  <ExternalLink size={12} />
-                </a>
               )}
 
-              <div className="flex gap-2.5">
+              {authSuccess && (
+                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-300">
+                  <CheckCircle2 size={14} className="text-emerald-400" />
+                  <span>{authSuccess}</span>
+                </div>
+              )}
+
+              {/* Clean Actions */}
+              <div className="mt-6 flex gap-2.5 pt-3 border-t border-slate-800">
                 <a
                   href="/"
                   className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#fd5001] text-xs font-bold text-white hover:bg-[#e04600] transition shadow-md shadow-[#fd5001]/20 active:scale-[0.99]"
@@ -509,7 +854,7 @@ export default function AuthPage({ initialTab = 'login' }) {
                 </button>
               </div>
             </div>
-          </div>
+          )
         ) : (
           /* ================================================================ */
           /* AUTHENTICATION FORM (SIGN IN / SIGN UP / FORGOT)                 */

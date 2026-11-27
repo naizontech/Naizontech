@@ -463,72 +463,88 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => setUserMenuOpen((prev) => !prev)}
-                  className="inline-flex h-11 items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3.5 text-[14px] font-bold text-neutral-800 transition-colors hover:border-[#fd5001] hover:bg-neutral-50 shadow-sm"
+                  className="inline-flex h-11 items-center gap-2.5 rounded-lg border border-neutral-300 bg-white px-3.5 text-[14px] font-bold text-neutral-800 transition-colors hover:border-[#fd5001] hover:bg-neutral-50 shadow-sm"
                 >
-                  <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black uppercase text-white shadow-sm ${
+                  <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black uppercase text-white shadow-sm shrink-0 ${
                     isSuperAdmin(currentUser)
                       ? 'bg-gradient-to-tr from-amber-500 to-[#fd5001] ring-2 ring-amber-400/40'
                       : 'bg-[#fd5001]'
                   }`}>
                     {currentUser.displayName ? currentUser.displayName[0] : (currentUser.email ? currentUser.email[0] : 'U')}
                   </div>
-                  <span className="max-w-[190px] truncate text-[13.5px]">
+                  <span className="whitespace-nowrap text-[13.5px]">
                     {currentUser.displayName || currentUser.email.split('@')[0]}
                   </span>
                   {isSuperAdmin(currentUser) && (
-                    <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-700 ring-1 ring-amber-500/30">
+                    <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-700 ring-1 ring-amber-500/30">
                       ADMIN
                     </span>
                   )}
-                  <ChevronDown size={14} className="text-neutral-500" />
+                  <ChevronDown size={14} className="text-neutral-500 shrink-0" />
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-0 top-12 z-50 w-72 rounded-xl border border-neutral-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="absolute right-0 top-12 z-50 w-80 rounded-xl border border-neutral-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
                     <div className="border-b border-neutral-100 p-3 text-left">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-bold text-neutral-900 truncate">
-                          {currentUser.displayName || 'Authorized User'}
-                        </p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-neutral-900 truncate">
+                            {currentUser.displayName || 'Authorized User'}
+                          </p>
+                          <p className="mt-0.5 text-xs text-neutral-500 font-mono truncate">
+                            {currentUser.email}
+                          </p>
+                        </div>
                         {isSuperAdmin(currentUser) ? (
                           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 ring-1 ring-amber-400/40 whitespace-nowrap">
                             <Crown size={12} className="text-amber-500" />
                             Admin
                           </span>
                         ) : (
-                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 shrink-0">
                             Client
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5 text-xs text-neutral-500 truncate">
-                        {currentUser.email}
-                      </p>
                     </div>
 
                     <div className="py-1">
-                      {isSuperAdmin(currentUser) && (
+                      {isSuperAdmin(currentUser) ? (
+                        <>
+                          <a
+                            href="/login"
+                            onClick={() => setUserMenuOpen(false)}
+                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-900 bg-amber-50/80 transition hover:bg-amber-100/80 mb-1"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Crown size={14} className="text-amber-600" />
+                              <span>Admin Dashboard</span>
+                            </span>
+                            <span className="text-[10px] font-semibold text-amber-700 uppercase bg-amber-200/60 px-1.5 py-0.5 rounded">Owner</span>
+                          </a>
+
+                          <a
+                            href="/data"
+                            onClick={() => setUserMenuOpen(false)}
+                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 hover:text-[#fd5001] mb-1"
+                          >
+                            <span className="flex items-center gap-2">
+                              <FileText size={14} className="text-neutral-500" />
+                              <span>Enquiries & Leads Database</span>
+                            </span>
+                            <ExternalLink size={12} className="text-neutral-400" />
+                          </a>
+                        </>
+                      ) : (
                         <a
-                          href="/data"
+                          href="/login"
                           onClick={() => setUserMenuOpen(false)}
-                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-800 bg-amber-50/70 transition hover:bg-amber-100/70 mb-1"
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 hover:text-[#fd5001]"
                         >
-                          <span className="flex items-center gap-2">
-                            <Crown size={14} className="text-amber-600" />
-                            <span>Enquiries & Leads</span>
-                          </span>
-                          <ExternalLink size={12} />
+                          <User size={15} />
+                          <span>Account Profile</span>
                         </a>
                       )}
-
-                      <a
-                        href="/login"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 hover:text-[#fd5001]"
-                      >
-                        <User size={15} />
-                        <span>Account Profile</span>
-                      </a>
                     </div>
 
                     <div className="border-t border-neutral-100 pt-1">
@@ -544,16 +560,7 @@ export default function Navbar() {
                   </div>
                 )}
               </div>
-            ) : (
-              <a
-                href="/login"
-                aria-label="Sign In"
-                className="inline-flex h-11 items-center gap-2 rounded-lg border border-neutral-300 px-4 text-[14px] font-bold text-neutral-800 transition-colors hover:border-[#fd5001]/50 hover:bg-[#fd5001]/5 hover:text-[#fd5001]"
-              >
-                <LogIn size={16} className="text-[#fd5001]" />
-                <span>Sign In</span>
-              </a>
-            )}
+            ) : null}
 
             {/* [Contact Us] */}
             <a
@@ -700,28 +707,28 @@ export default function Navbar() {
                   </div>
                 </div>
 
-                {isSuperAdmin(currentUser) && (
+                {isSuperAdmin(currentUser) ? (
                   <a
-                    href="/data"
+                    href="/login"
                     onClick={() => setMobileOpen(false)}
                     className="mt-3 flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900"
                   >
                     <span className="flex items-center gap-1.5">
                       <Crown size={14} className="text-amber-600" />
-                      <span>Admin Leads Database (/data)</span>
+                      <span>Admin Dashboard</span>
                     </span>
-                    <ExternalLink size={13} />
+                    <span className="text-[10px] font-semibold text-amber-700 uppercase bg-amber-200/60 px-1.5 py-0.5 rounded">Owner</span>
+                  </a>
+                ) : (
+                  <a
+                    href="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white py-2 text-xs font-bold text-neutral-800 transition hover:bg-neutral-50"
+                  >
+                    <User size={14} />
+                    <span>Account Profile</span>
                   </a>
                 )}
-
-                <a
-                  href="/login"
-                  onClick={() => setMobileOpen(false)}
-                  className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white py-2 text-xs font-bold text-neutral-800 transition hover:bg-neutral-50"
-                >
-                  <User size={14} />
-                  <span>My Account & Controls</span>
-                </a>
 
                 <button
                   type="button"
@@ -732,19 +739,10 @@ export default function Navbar() {
                   className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-white py-2 text-xs font-bold text-red-600 transition hover:bg-red-50"
                 >
                   <LogOut size={14} />
-                  <span>Sign Out (Logout)</span>
+                  <span>Sign Out</span>
                 </button>
               </div>
-            ) : (
-              <a
-                href="/login"
-                onClick={() => setMobileOpen(false)}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-neutral-300 px-5 text-[14.5px] font-bold text-neutral-800 transition hover:border-[#fd5001]/50 hover:bg-[#fd5001]/5 hover:text-[#fd5001]"
-              >
-                <LogIn size={18} className="text-[#fd5001]" />
-                <span>Sign In</span>
-              </a>
-            )}
+            ) : null}
 
             <a
               href="/#contact"
