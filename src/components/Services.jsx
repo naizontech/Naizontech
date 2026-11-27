@@ -52,6 +52,9 @@ export default function Services() {
                   src={card.image}
                   alt={card.imageAlt}
                   loading="lazy"
+                  decoding="async"
+                  width="400"
+                  height="210"
                   className="h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                 />
               </div>

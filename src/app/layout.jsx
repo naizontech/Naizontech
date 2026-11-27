@@ -1,5 +1,20 @@
 import '../index.css'
+import { Inter, Manrope } from 'next/font/google'
 import FirebaseAnalytics from '../components/FirebaseAnalytics'
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+  weight: ['400', '500', '600', '700'],
+})
+
+const manrope = Manrope({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-manrope',
+  weight: ['600', '700', '800'],
+})
 
 export const viewport = {
   themeColor: '#f8f8f5',
@@ -49,15 +64,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en-IN" className="scroll-smooth">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en-IN" className={`scroll-smooth ${inter.variable} ${manrope.variable}`}>
       <body className="m-0 overflow-x-hidden overscroll-y-none bg-[#f8f8f5] text-[#172033] antialiased">
         <FirebaseAnalytics />
         {children}

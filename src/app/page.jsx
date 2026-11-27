@@ -1,17 +1,20 @@
+import dynamic from 'next/dynamic'
 import Navbar from '../components/Navbar'
 import Hero from '../components/Hero'
 import Services from '../components/Services'
-import MosaicInsights from '../components/MosaicInsights'
-import Portfolio from '../components/Portfolio'
-import NewsAndInsights from '../components/NewsAndInsights'
-import HowItWorks from '../components/HowItWorks'
-import WhyChooseUs from '../components/WhyChooseUs'
-import About from '../components/About'
-import FAQ from '../components/FAQ'
-import Contact from '../components/Contact'
 import Footer from '../components/Footer'
-import WhatsAppButton from '../components/WhatsAppButton'
 import { organizationSchema, websiteSchema } from '../data/schemas'
+
+// High-Performance Dynamic Code Splitting for Below-the-Fold Sections
+const Portfolio = dynamic(() => import('../components/Portfolio'), { ssr: true })
+const MosaicInsights = dynamic(() => import('../components/MosaicInsights'), { ssr: true })
+const NewsAndInsights = dynamic(() => import('../components/NewsAndInsights'), { ssr: true })
+const HowItWorks = dynamic(() => import('../components/HowItWorks'), { ssr: true })
+const WhyChooseUs = dynamic(() => import('../components/WhyChooseUs'), { ssr: true })
+const About = dynamic(() => import('../components/About'), { ssr: true })
+const FAQ = dynamic(() => import('../components/FAQ'), { ssr: true })
+const Contact = dynamic(() => import('../components/Contact'), { ssr: true })
+const WhatsAppButton = dynamic(() => import('../components/WhatsAppButton'))
 
 export const metadata = {
   title: 'NAIZON | Custom Software, SaaS, Web, Mobile & Desktop Development',

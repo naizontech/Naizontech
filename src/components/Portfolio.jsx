@@ -132,6 +132,9 @@ export default function Portfolio() {
                 src={story.image}
                 alt={story.imageAlt}
                 loading="lazy"
+                decoding="async"
+                width="370"
+                height="500"
                 className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-105"
               />
 
