@@ -393,212 +393,118 @@ export default function AuthPage({ initialTab = 'login' }) {
           </div>
         ) : currentUser ? (
           /* ================================================================ */
-          /* EXECUTIVE LOGGED-IN DASHBOARD & PROFILE VIEW                      */
+          /* MINIMALIST & LIGHTWEIGHT PROFILE VIEW                            */
           /* ================================================================ */
-          <div className="rounded-2xl border border-slate-800 bg-[#161c2d] shadow-2xl shadow-black/40 overflow-hidden animate-in fade-in duration-200">
-            {/* Header Banner with Subtle Brand Glow */}
-            <div className={`p-6 sm:p-8 border-b ${isAdmin ? 'bg-gradient-to-r from-[#1e1e2f] via-[#241a27] to-[#1e151e] border-amber-500/30' : 'bg-gradient-to-r from-slate-900 to-slate-800 border-slate-800'}`}>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  {/* Avatar with Online Pulse & Guaranteed Fallback */}
-                  <div className="relative">
-                    {currentUser.photoURL && !avatarFailed ? (
-                      <img
-                        src={currentUser.photoURL}
-                        alt="User Avatar"
-                        onError={() => setAvatarFailed(true)}
-                        className="h-16 w-16 rounded-2xl border-2 border-slate-700 object-cover shadow-lg"
-                      />
-                    ) : (
-                      <div className={`grid h-16 w-16 place-items-center rounded-2xl text-2xl font-black uppercase text-white shadow-lg ${isAdmin ? 'bg-gradient-to-br from-amber-500 via-[#fd5001] to-[#e04600] ring-2 ring-amber-400/50' : 'bg-[#fd5001]'}`}>
-                        {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
-                      </div>
-                    )}
-                    <span className="absolute -bottom-1 -right-1 flex h-4 w-4">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-4 w-4 rounded-full border-2 border-[#161c2d] bg-emerald-500" />
-                    </span>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
-                        {currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : 'Authorized User')}
-                      </h1>
-                    </div>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <p className="text-xs text-slate-400 font-mono">
-                        {currentUser.email || currentUser.phoneNumber || 'User'}
-                      </p>
-                      {currentUser.email && (
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(currentUser.email, 'email')}
-                          title="Copy email address"
-                          className="rounded p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition"
-                        >
-                          {copiedField === 'email' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                        </button>
-                      )}
-                      {copiedField === 'email' && (
-                        <span className="text-[10px] text-emerald-400 font-bold">Copied!</span>
-                      )}
-                    </div>
-                  </div>
+          <div className="rounded-2xl border border-slate-800 bg-[#161c2d] p-7 shadow-2xl sm:p-8 animate-in fade-in duration-200 text-center">
+            {/* Avatar with Online Indicator */}
+            <div className="relative mx-auto w-fit">
+              {currentUser.photoURL && !avatarFailed ? (
+                <img
+                  src={currentUser.photoURL}
+                  alt="User Avatar"
+                  onError={() => setAvatarFailed(true)}
+                  className="h-16 w-16 rounded-full border-2 border-slate-700 object-cover shadow-md mx-auto"
+                />
+              ) : (
+                <div className={`grid h-16 w-16 place-items-center rounded-full text-2xl font-black uppercase text-white shadow-md mx-auto ${
+                  isAdmin ? 'bg-gradient-to-tr from-amber-500 to-[#fd5001] ring-2 ring-amber-400/40' : 'bg-[#fd5001]'
+                }`}>
+                  {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
                 </div>
-
-                {/* Role Badge */}
-                {isAdmin ? (
-                  <div className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-amber-300 ring-1 ring-amber-400/40 shadow-sm">
-                    <Crown size={15} className="text-amber-400" />
-                    <span>SUPER ADMIN</span>
-                  </div>
-                ) : (
-                  <div className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 ring-1 ring-emerald-500/30">
-                    <ShieldCheck size={15} />
-                    <span>CLIENT PORTAL</span>
-                  </div>
-                )}
-              </div>
+              )}
+              <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5">
+                <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-[#161c2d] bg-emerald-500" />
+              </span>
             </div>
 
-            {/* Account Details & Status Grid */}
-            <div className="p-6 sm:p-8 space-y-5">
-              
-              {/* Unverified Email Warning Banner */}
-              {currentUser.email && !currentUser.emailVerified && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5">
-                      <AlertTriangle size={18} className="text-amber-400 mt-0.5 shrink-0" />
-                      <div>
-                        <h2 className="text-xs font-bold text-amber-300 uppercase tracking-wider">Email Verification Pending</h2>
-                        <p className="mt-0.5 text-xs text-slate-300">
-                          Your email has not been verified yet. Complete verification to activate all enterprise deliverables.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleResendVerification}
-                      disabled={resendCooldown > 0}
-                      className="shrink-0 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-3 py-1.5 text-xs font-bold text-amber-200 transition disabled:opacity-50"
-                    >
-                      {resendCooldown > 0 ? `${resendCooldown}s` : 'Verify Now'}
-                    </button>
-                  </div>
-                </div>
+            {/* Name & Role Badge */}
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight text-white">
+                {currentUser.displayName || 'Authorized User'}
+              </h1>
+              {isAdmin ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-bold text-amber-400 ring-1 ring-amber-500/30">
+                  <Crown size={12} className="text-amber-400" />
+                  Admin
+                </span>
+              ) : (
+                <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-bold text-emerald-400 ring-1 ring-emerald-500/30">
+                  Client
+                </span>
               )}
+            </div>
 
-              {/* Status Alert */}
-              {authSuccess && (
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
-                  <CheckCircle2 size={16} className="text-emerald-400" />
-                  <span>{authSuccess}</span>
-                </div>
+            {/* Email with Copy */}
+            <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-slate-400 font-mono">
+              <span>{currentUser.email || currentUser.phoneNumber || 'User'}</span>
+              {currentUser.email && (
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(currentUser.email, 'email')}
+                  title="Copy email"
+                  className="text-slate-500 hover:text-slate-300 transition"
+                >
+                  {copiedField === 'email' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                </button>
               )}
+              {copiedField === 'email' && (
+                <span className="text-[10px] text-emerald-400 font-bold">Copied!</span>
+              )}
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-4">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Account Role</span>
-                  <div className="mt-1 flex items-center gap-2">
-                    {isAdmin ? (
-                      <>
-                        <Crown size={16} className="text-amber-400" />
-                        <span className="text-sm font-bold text-amber-300">Super Administrator (Owner)</span>
-                      </>
-                    ) : (
-                      <>
-                        <User size={16} className="text-slate-300" />
-                        <span className="text-sm font-bold text-slate-200">Verified Client Member</span>
-                      </>
-                    )}
-                  </div>
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    {isAdmin ? 'Full root access to enquiries, configurations, and analytics.' : 'Access to client deliverables, sprint environments & tickets.'}
-                  </p>
+            {/* Unverified Email Warning (Only if pending) */}
+            {currentUser.email && !currentUser.emailVerified && (
+              <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-left">
+                <div className="flex items-center gap-2 text-xs text-amber-300">
+                  <AlertTriangle size={15} className="shrink-0 text-amber-400" />
+                  <span>Email verification pending</span>
                 </div>
-
-                <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-4">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Security & Session</span>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                    <span className="text-sm font-bold text-emerald-400">
-                      {currentUser.emailVerified ? 'Verified Email · Active' : 'Active Session'}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500 font-mono">
-                    <span>UID: {currentUser.uid.slice(0, 14)}...</span>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(currentUser.uid, 'uid')}
-                      title="Copy full UID"
-                      className="rounded p-0.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition"
-                    >
-                      {copiedField === 'uid' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                    </button>
-                    {copiedField === 'uid' && (
-                      <span className="text-[10px] text-emerald-400 font-bold">Copied!</span>
-                    )}
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={resendCooldown > 0}
+                  className="shrink-0 text-xs font-bold text-amber-400 hover:underline disabled:opacity-50"
+                >
+                  {resendCooldown > 0 ? `${resendCooldown}s` : 'Verify'}
+                </button>
               </div>
+            )}
 
-              {/* Admin Special Command Hub */}
+            {authSuccess && (
+              <div className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-300">
+                <CheckCircle2 size={14} className="text-emerald-400" />
+                <span>{authSuccess}</span>
+              </div>
+            )}
+
+            {/* Clean Actions */}
+            <div className="mt-6 space-y-2.5 pt-3 border-t border-slate-800">
               {isAdmin && (
-                <div className="rounded-xl border border-amber-500/30 bg-gradient-to-b from-amber-500/10 to-transparent p-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles size={16} className="text-amber-400" />
-                    <h2 className="text-xs font-bold uppercase tracking-wider text-amber-300">
-                      Super Admin Quick Actions
-                    </h2>
-                  </div>
-                  <p className="text-xs text-slate-300 mb-4">
-                    Privileged administrative controls enabled for <span className="font-mono text-amber-200">{ADMIN_EMAIL}</span>.
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <a
-                      href="/data"
-                      className="flex items-center justify-between rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 p-3 text-xs font-bold text-amber-200 transition"
-                    >
-                      <span className="flex items-center gap-2">
-                        <FileText size={16} />
-                        <span>Enquiries & Leads Database</span>
-                      </span>
-                      <ExternalLink size={14} />
-                    </a>
-
-                    <a
-                      href="/careers"
-                      className="flex items-center justify-between rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700 p-3 text-xs font-bold text-slate-200 transition"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Briefcase size={16} />
-                        <span>Careers & Internships</span>
-                      </span>
-                      <ExternalLink size={14} />
-                    </a>
-                  </div>
-                </div>
+                <a
+                  href="/data"
+                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-xs font-bold text-amber-300 transition"
+                >
+                  <Crown size={14} />
+                  <span>Enquiries & Leads Database</span>
+                  <ExternalLink size={12} />
+                </a>
               )}
 
-              {/* Symmetrical & Balanced Action Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <div className="flex gap-2.5">
                 <a
                   href="/"
-                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#fd5001] px-5 text-sm font-bold text-white shadow-lg shadow-[#fd5001]/25 transition hover:bg-[#e04600] active:scale-[0.99]"
+                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#fd5001] text-xs font-bold text-white hover:bg-[#e04600] transition shadow-md shadow-[#fd5001]/20 active:scale-[0.99]"
                 >
-                  <Home size={16} />
+                  <Home size={15} />
                   <span>Return to Website</span>
                 </a>
 
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-red-500/20 hover:border-red-500/40 px-5 text-sm font-bold text-slate-300 hover:text-red-300 transition active:scale-[0.99]"
+                  className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 hover:bg-red-500/10 hover:border-red-500/30 px-5 text-xs font-bold text-slate-300 hover:text-red-400 transition active:scale-[0.99]"
                 >
-                  <LogOut size={16} />
+                  <LogOut size={15} />
                   <span>Sign Out</span>
                 </button>
               </div>

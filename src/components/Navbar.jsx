@@ -484,51 +484,51 @@ export default function Navbar() {
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-0 top-12 z-50 w-64 rounded-xl border border-neutral-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="absolute right-0 top-12 z-50 w-72 rounded-xl border border-neutral-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
                     <div className="border-b border-neutral-100 p-3 text-left">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-bold text-neutral-900 truncate">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-bold text-neutral-900 truncate">
                           {currentUser.displayName || 'Authorized User'}
                         </p>
                         {isSuperAdmin(currentUser) ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 ring-1 ring-amber-400/40">
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 ring-1 ring-amber-400/40 whitespace-nowrap">
                             <Crown size={12} className="text-amber-500" />
-                            SUPER ADMIN
+                            Admin
                           </span>
                         ) : (
                           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                            CLIENT
+                            Client
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-[11px] text-neutral-500 truncate font-mono">
+                      <p className="mt-0.5 text-xs text-neutral-500 truncate">
                         {currentUser.email}
                       </p>
                     </div>
 
                     <div className="py-1">
+                      {isSuperAdmin(currentUser) && (
+                        <a
+                          href="/data"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-800 bg-amber-50/70 transition hover:bg-amber-100/70 mb-1"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Crown size={14} className="text-amber-600" />
+                            <span>Enquiries & Leads</span>
+                          </span>
+                          <ExternalLink size={12} />
+                        </a>
+                      )}
+
                       <a
                         href="/login"
                         onClick={() => setUserMenuOpen(false)}
                         className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 hover:text-[#fd5001]"
                       >
                         <User size={15} />
-                        <span>My Account & Controls</span>
+                        <span>Account Profile</span>
                       </a>
-
-                      {isSuperAdmin(currentUser) && (
-                        <a
-                          href="/data"
-                          onClick={() => setUserMenuOpen(false)}
-                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-800 bg-amber-50/80 transition hover:bg-amber-100/80"
-                        >
-                          <span className="flex items-center gap-2">
-                            <Crown size={15} className="text-amber-600" />
-                            <span>Admin Enquiries (/data)</span>
-                          </span>
-                          <ExternalLink size={12} />
-                        </a>
-                      )}
                     </div>
 
                     <div className="border-t border-neutral-100 pt-1">
@@ -538,7 +538,7 @@ export default function Navbar() {
                         className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-red-600 transition hover:bg-red-50"
                       >
                         <LogOut size={15} />
-                        <span>Sign Out (Logout)</span>
+                        <span>Sign Out</span>
                       </button>
                     </div>
                   </div>
