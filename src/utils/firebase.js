@@ -10,6 +10,12 @@ import {
   updateProfile,
   onAuthStateChanged,
   sendPasswordResetEmail,
+  sendEmailVerification,
+  applyActionCode,
+  verifyPasswordResetCode,
+  confirmPasswordReset,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
 } from 'firebase/auth'
 
 export const firebaseConfig = {
@@ -48,6 +54,12 @@ export const signUpWithEmail = async (email, password, displayName) => {
   if (displayName && userCredential.user) {
     await updateProfile(userCredential.user, { displayName })
   }
+  // Automatically dispatch verification email for enterprise security
+  try {
+    await sendEmailVerification(userCredential.user)
+  } catch (err) {
+    console.warn('Initial email verification dispatch notice:', err)
+  }
   return userCredential.user
 }
 
@@ -67,6 +79,47 @@ export const logoutUser = async () => {
 
 export const resetUserPassword = async (email) => {
   await sendPasswordResetEmail(auth, email)
+}
+
+export const sendVerificationEmail = async (user = auth.currentUser) => {
+  if (!user) throw new Error('No user is currently signed in.')
+  await sendEmailVerification(user)
+}
+
+export const verifyEmailAction = async (oobCode) => {
+  return await applyActionCode(auth, oobCode)
+}
+
+export const verifyResetCode = async (oobCode) => {
+  return await verifyPasswordResetCode(auth, oobCode)
+}
+
+export const confirmPasswordResetAction = async (oobCode, newPassword) => {
+  return await confirmPasswordReset(auth, oobCode, newPassword)
+}
+
+export const reloadUser = async () => {
+  if (auth.currentUser) {
+    await auth.currentUser.reload()
+    return auth.currentUser
+  }
+  return null
+}
+
+// Enterprise Phone OTP (Recaptcha + SMS)
+export const setupRecaptcha = (containerId) => {
+  if (typeof window === 'undefined') return null
+  if (!window.recaptchaVerifier) {
+    window.recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
+      size: 'invisible',
+      callback: () => {},
+    })
+  }
+  return window.recaptchaVerifier
+}
+
+export const sendPhoneOtp = async (phoneNumber, appVerifier) => {
+  return await signInWithPhoneNumber(auth, phoneNumber, appVerifier)
 }
 
 // Role & Permissions Configuration

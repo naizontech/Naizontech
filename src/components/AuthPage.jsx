@@ -9,9 +9,12 @@ import {
   loginWithGoogle,
   logoutUser,
   resetUserPassword,
+  sendVerificationEmail,
+  reloadUser,
+  setupRecaptcha,
+  sendPhoneOtp,
   onAuthStateChanged,
   isSuperAdmin,
-  getUserRole,
   ADMIN_EMAIL,
 } from '../utils/firebase'
 import {
@@ -37,6 +40,10 @@ import {
   FileText,
   Home,
   Briefcase,
+  Smartphone,
+  Send,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react'
 
 export default function AuthPage({ initialTab = 'login' }) {
@@ -45,6 +52,7 @@ export default function AuthPage({ initialTab = 'login' }) {
   const modeParam = searchParams.get('mode')
 
   const [tab, setTab] = useState(modeParam === 'signup' || initialTab === 'signup' ? 'signup' : 'login')
+  const [authMethod, setAuthMethod] = useState('email') // 'email' | 'phone'
   const [currentUser, setCurrentUser] = useState(null)
   const [loadingUser, setLoadingUser] = useState(true)
   const [authLoading, setAuthLoading] = useState(false)
@@ -55,6 +63,10 @@ export default function AuthPage({ initialTab = 'login' }) {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
+  // Verification post-signup modal state
+  const [verificationPendingEmail, setVerificationPendingEmail] = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
+
   // Form State with double password confirmation
   const [form, setForm] = useState({
     name: '',
@@ -62,6 +74,12 @@ export default function AuthPage({ initialTab = 'login' }) {
     password: '',
     confirmPassword: '',
   })
+
+  // Phone OTP State
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [otpCode, setOtpCode] = useState('')
+  const [confirmationResult, setConfirmationResult] = useState(null)
+  const [otpSent, setOtpSent] = useState(false)
 
   useEffect(() => {
     if (modeParam === 'signup') setTab('signup')
@@ -77,10 +95,17 @@ export default function AuthPage({ initialTab = 'login' }) {
     return () => unsubscribe()
   }, [])
 
+  // Cooldown countdown timer
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown((prev) => prev - 1), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [resendCooldown])
+
   // Password matching validation checks
   const passwordsMatch = form.password && form.confirmPassword && form.password === form.confirmPassword
   const passwordsMismatch = form.confirmPassword && form.password !== form.confirmPassword
-  const isPasswordValid = form.password.length >= 6
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -90,28 +115,19 @@ export default function AuthPage({ initialTab = 'login' }) {
 
     try {
       if (tab === 'signup') {
-        if (!form.name.trim()) {
-          throw new Error('Please enter your full name.')
-        }
-        if (!form.email.trim()) {
-          throw new Error('Please enter a valid work email.')
-        }
-        if (!form.password) {
-          throw new Error('Please enter a password.')
-        }
-        if (form.password.length < 6) {
-          throw new Error('Password must be at least 6 characters.')
-        }
-        if (!form.confirmPassword) {
-          throw new Error('Please confirm your password.')
-        }
+        if (!form.name.trim()) throw new Error('Please enter your full name.')
+        if (!form.email.trim()) throw new Error('Please enter a valid work email.')
+        if (!form.password) throw new Error('Please enter a password.')
+        if (form.password.length < 6) throw new Error('Password must be at least 6 characters.')
+        if (!form.confirmPassword) throw new Error('Please confirm your password.')
         if (form.password !== form.confirmPassword) {
-          throw new Error('Passwords do not match. Please ensure both password fields are identical.')
+          throw new Error('Passwords do not match. Please ensure both fields are identical.')
         }
 
-        await signUpWithEmail(form.email.trim(), form.password, form.name.trim())
-        setAuthSuccess('Account registered successfully! Redirecting...')
-        setTimeout(() => router.push('/'), 1200)
+        const newUser = await signUpWithEmail(form.email.trim(), form.password, form.name.trim())
+        setVerificationPendingEmail(newUser.email || form.email.trim())
+        setResendCooldown(60)
+        setAuthSuccess('Account registered! A verification link has been sent to your email.')
       } else if (tab === 'login') {
         if (!form.email.trim() || !form.password) {
           throw new Error('Please enter both email and password.')
@@ -162,6 +178,84 @@ export default function AuthPage({ initialTab = 'login' }) {
     }
   }
 
+  // Handle Phone SMS OTP
+  const handleSendOtp = async (e) => {
+    e.preventDefault()
+    setAuthError('')
+    setAuthSuccess('')
+    setAuthLoading(true)
+
+    try {
+      if (!phoneNumber || phoneNumber.trim().length < 10) {
+        throw new Error('Please enter a valid phone number with country code (e.g. +91 9876543210).')
+      }
+      const appVerifier = setupRecaptcha('recaptcha-container')
+      const confirmation = await sendPhoneOtp(phoneNumber.trim(), appVerifier)
+      setConfirmationResult(confirmation)
+      setOtpSent(true)
+      setAuthSuccess('Verification code sent to ' + phoneNumber + '! Enter code below.')
+    } catch (err) {
+      setAuthError(err.message || 'Could not dispatch SMS verification code.')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault()
+    setAuthError('')
+    setAuthSuccess('')
+    setAuthLoading(true)
+
+    try {
+      if (!otpCode || otpCode.trim().length < 6) {
+        throw new Error('Please enter the 6-digit verification code.')
+      }
+      if (!confirmationResult) {
+        throw new Error('Please request an SMS code first.')
+      }
+      await confirmationResult.confirm(otpCode.trim())
+      setAuthSuccess('Phone verification successful! Redirecting...')
+      setTimeout(() => router.push('/'), 1000)
+    } catch (err) {
+      setAuthError(err.message || 'Invalid or expired verification code.')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  // Resend email verification
+  const handleResendVerification = async () => {
+    if (resendCooldown > 0) return
+    setAuthError('')
+    try {
+      await sendVerificationEmail(currentUser || auth.currentUser)
+      setResendCooldown(60)
+      setAuthSuccess('Verification email resent! Please check your inbox.')
+    } catch (err) {
+      setAuthError(err.message || 'Failed to resend verification email.')
+    }
+  }
+
+  // Reload user state to check if email was verified
+  const handleCheckEmailVerified = async () => {
+    setAuthLoading(true)
+    try {
+      const refreshed = await reloadUser()
+      if (refreshed?.emailVerified) {
+        setVerificationPendingEmail('')
+        setAuthSuccess('Email verified successfully! Welcome to NAIZON.')
+        router.push('/')
+      } else {
+        setAuthError('Email not yet marked as verified. Please click the link in your email first.')
+      }
+    } catch (err) {
+      setAuthError(err.message || 'Error reloading verification status.')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   const handleLogout = async () => {
     try {
       await logoutUser()
@@ -175,6 +269,9 @@ export default function AuthPage({ initialTab = 'login' }) {
 
   return (
     <div className="min-h-screen bg-[#0e131f] text-slate-100 flex flex-col justify-between py-10 px-4 sm:px-6 lg:px-8 selection:bg-[#fd5001] selection:text-white">
+      {/* Invisible Recaptcha Container for Phone Auth */}
+      <div id="recaptcha-container"></div>
+
       {/* Top Bar with Navigation & Security Badge */}
       <header className="mx-auto w-full max-w-xl flex items-center justify-between pb-6 border-b border-slate-800/80">
         <a
@@ -193,7 +290,75 @@ export default function AuthPage({ initialTab = 'login' }) {
 
       {/* Main Content Area */}
       <main className="mx-auto w-full max-w-xl py-6">
-        {currentUser ? (
+        
+        {/* Verification Pending Screen (Shown right after signup) */}
+        {verificationPendingEmail ? (
+          <div className="rounded-2xl border border-slate-800 bg-[#161c2d] p-7 shadow-2xl sm:p-9 text-center animate-in fade-in duration-200">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#fd5001]/10 text-[#fd5001] ring-1 ring-[#fd5001]/30">
+              <Mail size={32} />
+            </div>
+
+            <span className="mt-4 inline-block rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-400 ring-1 ring-amber-500/30">
+              Verification Required
+            </span>
+
+            <h1 className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              Verify Your Email Address
+            </h1>
+
+            <p className="mt-2 text-xs leading-relaxed text-slate-400 max-w-md mx-auto">
+              We have dispatched a secure verification link to{' '}
+              <strong className="text-white font-mono">{verificationPendingEmail}</strong>.
+              Click the link in the email to activate your account.
+            </p>
+
+            {authError && (
+              <div className="mt-4 flex items-center justify-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl">
+                <AlertCircle size={15} />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            {authSuccess && (
+              <div className="mt-4 flex items-center justify-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl">
+                <CheckCircle2 size={15} />
+                <span>{authSuccess}</span>
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                type="button"
+                onClick={handleCheckEmailVerified}
+                disabled={authLoading}
+                className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#fd5001] px-5 text-xs font-bold text-white shadow-lg shadow-[#fd5001]/25 hover:bg-[#e04600] transition active:scale-[0.99] disabled:opacity-50"
+              >
+                {authLoading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+                <span>I Have Verified My Email</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={resendCooldown > 0}
+                className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-5 text-xs font-bold text-slate-300 hover:bg-slate-800 transition disabled:opacity-50"
+              >
+                <Send size={14} />
+                <span>{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Verification Link'}</span>
+              </button>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setVerificationPendingEmail('')}
+                className="text-xs text-slate-500 hover:text-slate-300 underline"
+              >
+                &larr; Back to Sign In
+              </button>
+            </div>
+          </div>
+        ) : currentUser ? (
           /* ================================================================ */
           /* EXECUTIVE LOGGED-IN DASHBOARD & PROFILE VIEW                      */
           /* ================================================================ */
@@ -228,7 +393,7 @@ export default function AuthPage({ initialTab = 'login' }) {
                       </h1>
                     </div>
                     <p className="mt-0.5 text-xs text-slate-400 font-mono">
-                      {currentUser.email}
+                      {currentUser.email || currentUser.phoneNumber || 'User'}
                     </p>
                   </div>
                 </div>
@@ -249,7 +414,41 @@ export default function AuthPage({ initialTab = 'login' }) {
             </div>
 
             {/* Account Details & Status Grid */}
-            <div className="p-6 sm:p-8 space-y-6">
+            <div className="p-6 sm:p-8 space-y-5">
+              
+              {/* Unverified Email Warning Banner */}
+              {currentUser.email && !currentUser.emailVerified && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle size={18} className="text-amber-400 mt-0.5 shrink-0" />
+                      <div>
+                        <h2 className="text-xs font-bold text-amber-300 uppercase tracking-wider">Email Verification Pending</h2>
+                        <p className="mt-0.5 text-xs text-slate-300">
+                          Your email has not been verified yet. Click below to verify your account.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={resendCooldown > 0}
+                      className="shrink-0 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-3 py-1.5 text-xs font-bold text-amber-200 transition disabled:opacity-50"
+                    >
+                      {resendCooldown > 0 ? `${resendCooldown}s` : 'Verify Now'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Status Alert */}
+              {authSuccess && (
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+                  <CheckCircle2 size={16} className="text-emerald-400" />
+                  <span>{authSuccess}</span>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-4">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Account Role</span>
@@ -275,7 +474,9 @@ export default function AuthPage({ initialTab = 'login' }) {
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Security & Session</span>
                   <div className="mt-1 flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                    <span className="text-sm font-bold text-emerald-400">Firebase Active</span>
+                    <span className="text-sm font-bold text-emerald-400">
+                      {currentUser.emailVerified ? 'Verified Email · Active' : 'Active Session'}
+                    </span>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500 truncate font-mono">
                     UID: {currentUser.uid.slice(0, 16)}...
@@ -376,7 +577,7 @@ export default function AuthPage({ initialTab = 'login' }) {
               </p>
             </div>
 
-            {/* Tab Switcher */}
+            {/* Tab Switcher (Sign In vs Create Account) */}
             {tab !== 'forgot' && (
               <div className="mt-6 flex rounded-xl border border-slate-800 bg-slate-900/80 p-1">
                 <button
@@ -412,6 +613,32 @@ export default function AuthPage({ initialTab = 'login' }) {
               </div>
             )}
 
+            {/* Method Switcher: Email vs Phone SMS (for Sign In) */}
+            {tab === 'login' && (
+              <div className="mt-4 flex justify-center gap-4 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setAuthMethod('email')}
+                  className={`inline-flex items-center gap-1.5 pb-1 border-b-2 transition ${
+                    authMethod === 'email' ? 'border-[#fd5001] text-white' : 'border-transparent text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  <Mail size={14} />
+                  <span>Email & Password</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMethod('phone')}
+                  className={`inline-flex items-center gap-1.5 pb-1 border-b-2 transition ${
+                    authMethod === 'phone' ? 'border-[#fd5001] text-white' : 'border-transparent text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  <Smartphone size={14} />
+                  <span>Phone SMS OTP</span>
+                </button>
+              </div>
+            )}
+
             {/* Alert Messages */}
             {authError && (
               <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-300">
@@ -428,7 +655,7 @@ export default function AuthPage({ initialTab = 'login' }) {
             )}
 
             {/* 1-Click Google Sign In */}
-            {tab !== 'forgot' && (
+            {tab !== 'forgot' && authMethod === 'email' && (
               <div className="mt-5">
                 <button
                   type="button"
@@ -468,192 +695,249 @@ export default function AuthPage({ initialTab = 'login' }) {
               </div>
             )}
 
-            {/* Email Authentication Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Full Name (Sign Up only) */}
-              {tab === 'signup' && (
+            {/* Phone SMS OTP Mode Form */}
+            {tab === 'login' && authMethod === 'phone' ? (
+              <div className="mt-5 space-y-4">
+                {!otpSent ? (
+                  <form onSubmit={handleSendOtp} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                        Mobile Phone Number
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="tel"
+                          required
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          placeholder="+91 9876543210"
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3.5 py-2.5 pl-10 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
+                        />
+                        <Smartphone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Include country code (e.g. +91 for India). Firebase will send a one-time passcode.
+                      </p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#fd5001] px-5 text-sm font-bold text-white shadow-lg shadow-[#fd5001]/20 transition hover:bg-[#e04600] active:scale-[0.99] disabled:opacity-50"
+                    >
+                      {authLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                      <span>Send Verification Code (SMS)</span>
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                        Enter 6-Digit SMS Code
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          required
+                          maxLength={6}
+                          value={otpCode}
+                          onChange={(e) => setOtpCode(e.target.value)}
+                          placeholder="123456"
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3.5 py-2.5 pl-10 text-center tracking-widest text-lg font-bold text-white placeholder-slate-500 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
+                        />
+                        <KeyRound size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#fd5001] px-5 text-sm font-bold text-white shadow-lg shadow-[#fd5001]/20 transition hover:bg-[#e04600] active:scale-[0.99] disabled:opacity-50"
+                    >
+                      {authLoading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                      <span>Verify & Sign In</span>
+                    </button>
+
+                    <div className="text-center pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setOtpSent(false)}
+                        className="text-xs text-slate-400 hover:text-white"
+                      >
+                        Change phone number
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            ) : (
+              /* Email Form (Standard Sign In / Sign Up) */
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Full Name (Sign Up only) */}
+                {tab === 'signup' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                      Full Name
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={form.name}
+                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        placeholder="e.g. Alex Morgan"
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3.5 py-2.5 pl-10 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
+                      />
+                      <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Email Address */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                    Full Name
+                    {tab === 'signup' ? 'Work Email Address' : 'Email Address'}
                   </label>
                   <div className="relative">
                     <input
-                      type="text"
+                      type="email"
                       required
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="e.g. Alex Morgan"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      placeholder="you@company.com"
                       className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3.5 py-2.5 pl-10 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
                     />
-                    <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
                   </div>
                 </div>
-              )}
 
-              {/* Email Address */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  {tab === 'signup' ? 'Work Email Address' : 'Email Address'}
-                </label>
-                <div className="relative">
-                  <input
-                    type="email"
-                    required
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    placeholder="you@company.com"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3.5 py-2.5 pl-10 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
-                  />
-                  <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                </div>
-              </div>
-
-              {/* Password Field */}
-              {tab !== 'forgot' && (
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-300">
-                      {tab === 'signup' ? 'Create Password' : 'Password'}
-                    </label>
-                    {tab === 'login' && (
+                {/* Password Field */}
+                {tab !== 'forgot' && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-300">
+                        {tab === 'signup' ? 'Create Password' : 'Password'}
+                      </label>
+                      {tab === 'login' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTab('forgot')
+                            setAuthError('')
+                            setAuthSuccess('')
+                          }}
+                          className="text-[11px] font-bold text-[#fd5001] hover:underline"
+                        >
+                          Forgot password?
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={form.password}
+                        onChange={(e) => setForm({ ...form, password: e.target.value })}
+                        placeholder="At least 6 characters"
+                        minLength={6}
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3.5 py-2.5 pl-10 pr-11 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
+                      />
+                      <KeyRound size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
                       <button
                         type="button"
-                        onClick={() => {
-                          setTab('forgot')
-                          setAuthError('')
-                          setAuthSuccess('')
-                        }}
-                        className="text-[11px] font-bold text-[#fd5001] hover:underline"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
                       >
-                        Forgot password?
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
-                    )}
+                    </div>
                   </div>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      value={form.password}
-                      onChange={(e) => setForm({ ...form, password: e.target.value })}
-                      placeholder="At least 6 characters"
-                      minLength={6}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3.5 py-2.5 pl-10 pr-11 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
-                    />
-                    <KeyRound size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-              )}
+                )}
 
-              {/* CONFIRM PASSWORD FIELD (Sign Up only: Double Password Confirmation) */}
-              {tab === 'signup' && (
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-300">
-                      Confirm Password
-                    </label>
-                    {form.confirmPassword && (
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${passwordsMatch ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {passwordsMatch ? (
-                          <>
-                            <Check size={13} strokeWidth={2.5} />
-                            <span>Passwords match</span>
-                          </>
-                        ) : (
-                          <>
-                            <X size={13} strokeWidth={2.5} />
-                            <span>Passwords do not match</span>
-                          </>
-                        )}
-                      </span>
-                    )}
+                {/* CONFIRM PASSWORD FIELD (Sign Up: Double Password Confirmation) */}
+                {tab === 'signup' && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-300">
+                        Confirm Password
+                      </label>
+                      {form.confirmPassword && (
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${passwordsMatch ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {passwordsMatch ? (
+                            <>
+                              <Check size={13} strokeWidth={2.5} />
+                              <span>Passwords match</span>
+                            </>
+                          ) : (
+                            <>
+                              <X size={13} strokeWidth={2.5} />
+                              <span>Passwords do not match</span>
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        required
+                        value={form.confirmPassword}
+                        onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                        placeholder="Re-enter your password"
+                        minLength={6}
+                        className={`w-full rounded-xl border bg-slate-900/60 px-3.5 py-2.5 pl-10 pr-11 text-sm text-white placeholder-slate-500 outline-none transition focus:ring-1 ${
+                          passwordsMatch
+                            ? 'border-emerald-500/80 focus:border-emerald-500 focus:ring-emerald-500/20'
+                            : passwordsMismatch
+                            ? 'border-red-500/80 focus:border-red-500 focus:ring-red-500/20'
+                            : 'border-slate-700 focus:border-[#fd5001] focus:ring-[#fd5001]'
+                        }`}
+                      />
+                      <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((prev) => !prev)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                        aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
                   </div>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      required
-                      value={form.confirmPassword}
-                      onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-                      placeholder="Re-enter your password"
-                      minLength={6}
-                      className={`w-full rounded-xl border bg-slate-900/60 px-3.5 py-2.5 pl-10 pr-11 text-sm text-white placeholder-slate-500 outline-none transition focus:ring-1 ${
-                        passwordsMatch
-                          ? 'border-emerald-500/80 focus:border-emerald-500 focus:ring-emerald-500/20'
-                          : passwordsMismatch
-                          ? 'border-red-500/80 focus:border-red-500 focus:ring-red-500/20'
-                          : 'border-slate-700 focus:border-[#fd5001] focus:ring-[#fd5001]'
-                      }`}
-                    />
-                    <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword((prev) => !prev)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-              )}
+                )}
 
-              {/* Submit Button */}
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={authLoading || (tab === 'signup' && passwordsMismatch)}
-                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#fd5001] px-5 text-sm font-bold text-white shadow-lg shadow-[#fd5001]/20 transition hover:bg-[#e04600] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {authLoading ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      <span>Authenticating...</span>
-                    </>
-                  ) : tab === 'signup' ? (
-                    <>
-                      <UserPlus size={16} />
-                      <span>Create Account</span>
-                    </>
-                  ) : tab === 'login' ? (
-                    <>
-                      <LogIn size={16} />
-                      <span>Sign In</span>
-                    </>
-                  ) : (
-                    <span>Send Password Reset Link</span>
-                  )}
-                </button>
-              </div>
-
-              {/* Forgot password back link */}
-              {tab === 'forgot' && (
-                <div className="text-center pt-2">
+                {/* Submit Button */}
+                <div className="pt-2">
                   <button
-                    type="button"
-                    onClick={() => {
-                      setTab('login')
-                      setAuthError('')
-                      setAuthSuccess('')
-                    }}
-                    className="text-xs font-bold text-slate-400 hover:text-[#fd5001]"
+                    type="submit"
+                    disabled={authLoading || (tab === 'signup' && passwordsMismatch)}
+                    className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#fd5001] px-5 text-sm font-bold text-white shadow-lg shadow-[#fd5001]/20 transition hover:bg-[#e04600] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    &larr; Back to Sign In
+                    {authLoading ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Authenticating...</span>
+                      </>
+                    ) : tab === 'signup' ? (
+                      <>
+                        <UserPlus size={16} />
+                        <span>Create Account & Verify</span>
+                      </>
+                    ) : tab === 'login' ? (
+                      <>
+                        <LogIn size={16} />
+                        <span>Sign In</span>
+                      </>
+                    ) : (
+                      <span>Send Password Reset Link</span>
+                    )}
                   </button>
                 </div>
-              )}
 
-              {/* Bottom Switcher */}
-              <div className="pt-2 text-center text-xs text-slate-400">
-                {tab === 'signup' && (
-                  <p>
-                    Already have an account?{' '}
+                {/* Forgot password back link */}
+                {tab === 'forgot' && (
+                  <div className="text-center pt-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -661,30 +945,50 @@ export default function AuthPage({ initialTab = 'login' }) {
                         setAuthError('')
                         setAuthSuccess('')
                       }}
-                      className="font-bold text-[#fd5001] hover:underline"
+                      className="text-xs font-bold text-slate-400 hover:text-[#fd5001]"
                     >
-                      Sign In
+                      &larr; Back to Sign In
                     </button>
-                  </p>
+                  </div>
                 )}
-                {tab === 'login' && (
-                  <p>
-                    Don&apos;t have an account?{' '}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTab('signup')
-                        setAuthError('')
-                        setAuthSuccess('')
-                      }}
-                      className="font-bold text-[#fd5001] hover:underline"
-                    >
-                      Create an account
-                    </button>
-                  </p>
-                )}
-              </div>
-            </form>
+
+                {/* Bottom Switcher */}
+                <div className="pt-2 text-center text-xs text-slate-400">
+                  {tab === 'signup' && (
+                    <p>
+                      Already have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTab('login')
+                          setAuthError('')
+                          setAuthSuccess('')
+                        }}
+                        className="font-bold text-[#fd5001] hover:underline"
+                      >
+                        Sign In
+                      </button>
+                    </p>
+                  )}
+                  {tab === 'login' && (
+                    <p>
+                      Don&apos;t have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTab('signup')
+                          setAuthError('')
+                          setAuthSuccess('')
+                        }}
+                        className="font-bold text-[#fd5001] hover:underline"
+                      >
+                        Create an account
+                      </button>
+                    </p>
+                  )}
+                </div>
+              </form>
+            )}
           </div>
         )}
       </main>
@@ -692,7 +996,7 @@ export default function AuthPage({ initialTab = 'login' }) {
       {/* Footer */}
       <footer className="mx-auto w-full max-w-xl pt-6 border-t border-slate-800/80 text-center">
         <p className="text-xs text-slate-500">
-          © {new Date().getFullYear()} NAIZON · Enterprise Engineering & Digital Solutions
+          © {new Date().getFullYear()} NAIZON · Enterprise Security & Identity Management
         </p>
       </footer>
     </div>
