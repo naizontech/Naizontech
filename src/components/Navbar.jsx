@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Crown,
 } from 'lucide-react'
 import {
   auth,
@@ -33,6 +34,8 @@ import {
   logoutUser,
   resetUserPassword,
   onAuthStateChanged,
+  isSuperAdmin,
+  ADMIN_EMAIL,
 } from '../utils/firebase'
 
 const navigationData = [
@@ -151,10 +154,12 @@ export default function Navbar() {
   const [authError, setAuthError] = useState('')
   const [authSuccess, setAuthSuccess] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [authForm, setAuthForm] = useState({
     name: '',
     email: '',
     password: '',
+    confirmPassword: '',
   })
 
   const timeoutRef = useRef(null)
@@ -177,27 +182,33 @@ export default function Navbar() {
 
     try {
       if (authTab === 'signup') {
-        if (!authForm.email || !authForm.password) {
+        if (!authForm.name.trim()) {
+          throw new Error('Please enter your full name.')
+        }
+        if (!authForm.email.trim() || !authForm.password) {
           throw new Error('Please enter both email and password.')
         }
         if (authForm.password.length < 6) {
           throw new Error('Password must be at least 6 characters.')
         }
-        await signUpWithEmail(authForm.email, authForm.password, authForm.name)
+        if (authForm.password !== authForm.confirmPassword) {
+          throw new Error('Passwords do not match. Please verify both fields.')
+        }
+        await signUpWithEmail(authForm.email.trim(), authForm.password, authForm.name.trim())
         setAuthModalOpen(false)
-        setAuthForm({ name: '', email: '', password: '' })
+        setAuthForm({ name: '', email: '', password: '', confirmPassword: '' })
       } else if (authTab === 'login') {
-        if (!authForm.email || !authForm.password) {
+        if (!authForm.email.trim() || !authForm.password) {
           throw new Error('Please enter both email and password.')
         }
-        await loginWithEmail(authForm.email, authForm.password)
+        await loginWithEmail(authForm.email.trim(), authForm.password)
         setAuthModalOpen(false)
-        setAuthForm({ name: '', email: '', password: '' })
+        setAuthForm({ name: '', email: '', password: '', confirmPassword: '' })
       } else if (authTab === 'forgot') {
-        if (!authForm.email) {
+        if (!authForm.email.trim()) {
           throw new Error('Please enter your email address.')
         }
-        await resetUserPassword(authForm.email)
+        await resetUserPassword(authForm.email.trim())
         setAuthSuccess('Password reset link sent to your email! Please check your inbox.')
       }
     } catch (err) {
@@ -454,38 +465,82 @@ export default function Navbar() {
                   onClick={() => setUserMenuOpen((prev) => !prev)}
                   className="inline-flex h-11 items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3.5 text-[14px] font-bold text-neutral-800 transition-colors hover:border-[#fd5001] hover:bg-neutral-50 shadow-sm"
                 >
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#fd5001] text-xs font-bold text-white uppercase shadow-sm">
+                  <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black uppercase text-white shadow-sm ${
+                    isSuperAdmin(currentUser)
+                      ? 'bg-gradient-to-tr from-amber-500 to-[#fd5001] ring-2 ring-amber-400/40'
+                      : 'bg-[#fd5001]'
+                  }`}>
                     {currentUser.displayName ? currentUser.displayName[0] : (currentUser.email ? currentUser.email[0] : 'U')}
                   </div>
                   <span className="max-w-[120px] truncate text-[13.5px]">
                     {currentUser.displayName || currentUser.email.split('@')[0]}
                   </span>
+                  {isSuperAdmin(currentUser) && (
+                    <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-700 ring-1 ring-amber-500/30">
+                      ADMIN
+                    </span>
+                  )}
                   <ChevronDown size={14} className="text-neutral-500" />
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-0 top-12 z-50 w-60 rounded-xl border border-neutral-200 bg-white p-2 shadow-xl animate-in fade-in slide-in-from-top-1 duration-150">
-                    <div className="border-b border-neutral-100 px-3 py-2 text-left">
-                      <p className="text-xs font-bold text-neutral-900 truncate">
-                        {currentUser.displayName || 'Client Account'}
-                      </p>
-                      <p className="text-[11px] text-neutral-500 truncate">
+                  <div className="absolute right-0 top-12 z-50 w-64 rounded-xl border border-neutral-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="border-b border-neutral-100 p-3 text-left">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-bold text-neutral-900 truncate">
+                          {currentUser.displayName || 'Authorized User'}
+                        </p>
+                        {isSuperAdmin(currentUser) ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 ring-1 ring-amber-400/40">
+                            <Crown size={12} className="text-amber-500" />
+                            SUPER ADMIN
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                            CLIENT
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-[11px] text-neutral-500 truncate font-mono">
                         {currentUser.email}
                       </p>
-                      <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        Firebase Active
-                      </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-red-600 transition hover:bg-red-50"
-                    >
-                      <LogOut size={15} />
-                      <span>Sign Out (Logout)</span>
-                    </button>
+                    <div className="py-1">
+                      <a
+                        href="/login"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 hover:text-[#fd5001]"
+                      >
+                        <User size={15} />
+                        <span>My Account & Controls</span>
+                      </a>
+
+                      {isSuperAdmin(currentUser) && (
+                        <a
+                          href="/data"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold text-amber-800 bg-amber-50/80 transition hover:bg-amber-100/80"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Crown size={15} className="text-amber-600" />
+                            <span>Admin Enquiries (/data)</span>
+                          </span>
+                          <ExternalLink size={12} />
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="border-t border-neutral-100 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-red-600 transition hover:bg-red-50"
+                      >
+                        <LogOut size={15} />
+                        <span>Sign Out (Logout)</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -624,17 +679,49 @@ export default function Navbar() {
                       className="h-10 w-10 rounded-full border border-[#fd5001]/30 object-cover"
                     />
                   ) : (
-                    <div className="grid h-10 w-10 place-items-center rounded-full bg-[#fd5001] font-bold text-white">
+                    <div className={`grid h-10 w-10 place-items-center rounded-full text-white font-bold text-sm shadow-sm ${
+                      isSuperAdmin(currentUser) ? 'bg-gradient-to-tr from-amber-500 to-[#fd5001]' : 'bg-[#fd5001]'
+                    }`}>
                       {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-neutral-900">
-                      {currentUser.displayName || 'Client Account'}
-                    </p>
-                    <p className="truncate text-xs text-neutral-500">{currentUser.email}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate text-sm font-bold text-neutral-900">
+                        {currentUser.displayName || 'Authorized Account'}
+                      </p>
+                      {isSuperAdmin(currentUser) && (
+                        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black text-amber-700">
+                          ADMIN
+                        </span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-neutral-500 font-mono">{currentUser.email}</p>
                   </div>
                 </div>
+
+                {isSuperAdmin(currentUser) && (
+                  <a
+                    href="/data"
+                    onClick={() => setMobileOpen(false)}
+                    className="mt-3 flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Crown size={14} className="text-amber-600" />
+                      <span>Admin Leads Database (/data)</span>
+                    </span>
+                    <ExternalLink size={13} />
+                  </a>
+                )}
+
+                <a
+                  href="/login"
+                  onClick={() => setMobileOpen(false)}
+                  className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white py-2 text-xs font-bold text-neutral-800 transition hover:bg-neutral-50"
+                >
+                  <User size={14} />
+                  <span>My Account & Controls</span>
+                </a>
 
                 <button
                   type="button"
@@ -642,7 +729,7 @@ export default function Navbar() {
                     handleLogout()
                     setMobileOpen(false)
                   }}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-white py-2 text-xs font-bold text-red-600 transition hover:bg-red-50"
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-white py-2 text-xs font-bold text-red-600 transition hover:bg-red-50"
                 >
                   <LogOut size={14} />
                   <span>Sign Out (Logout)</span>
@@ -861,7 +948,7 @@ export default function Navbar() {
                       required
                       value={authForm.password}
                       onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
-                      placeholder="••••••••"
+                      placeholder="At least 6 characters"
                       minLength={6}
                       className="w-full rounded-lg border border-neutral-300 px-3.5 py-2 pr-10 text-sm text-neutral-900 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
                     />
@@ -871,6 +958,38 @@ export default function Navbar() {
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirm Password (Modal Signup) */}
+              {authTab === 'signup' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-neutral-700">Confirm Password</label>
+                    {authForm.confirmPassword && (
+                      <span className={`text-[11px] font-bold ${authForm.password === authForm.confirmPassword ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {authForm.password === authForm.confirmPassword ? '✓ Match' : '✕ No match'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      value={authForm.confirmPassword}
+                      onChange={(e) => setAuthForm({ ...authForm, confirmPassword: e.target.value })}
+                      placeholder="Re-enter password"
+                      minLength={6}
+                      className="w-full rounded-lg border border-neutral-300 px-3.5 py-2 pr-10 text-sm text-neutral-900 outline-none transition focus:border-[#fd5001] focus:ring-1 focus:ring-[#fd5001]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700"
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
                 </div>

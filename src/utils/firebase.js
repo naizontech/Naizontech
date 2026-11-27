@@ -69,4 +69,17 @@ export const resetUserPassword = async (email) => {
   await sendPasswordResetEmail(auth, email)
 }
 
+// Role & Permissions Configuration
+export const ADMIN_EMAIL = 'muhammadsufiayandev01@gmail.com'
+
+export const isSuperAdmin = (userOrEmail) => {
+  if (!userOrEmail) return false
+  const email = typeof userOrEmail === 'string' ? userOrEmail : userOrEmail?.email
+  return (email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase()
+}
+
+export const getUserRole = (userOrEmail) => {
+  return isSuperAdmin(userOrEmail) ? 'Super Admin' : 'Client'
+}
+
 export { onAuthStateChanged, analytics }
